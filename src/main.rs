@@ -26,6 +26,7 @@ enum Category {
     System,
     Utility,
     Game,
+    Other,
 }
 
 impl Category {
@@ -40,6 +41,7 @@ impl Category {
             Category::System => "System",
             Category::Utility => "Utilities",
             Category::Game => "Games",
+            Category::Other => "Other",
         }
     }
 
@@ -54,6 +56,7 @@ impl Category {
             Category::System => "$",
             Category::Utility => "%",
             Category::Game => "^",
+            Category::Other => "?",
         }
     }
 
@@ -68,6 +71,7 @@ impl Category {
             Category::System => matches!(app_category, AppCategory::System),
             Category::Utility => matches!(app_category, AppCategory::Utility),
             Category::Game => matches!(app_category, AppCategory::Game),
+            Category::Other => matches!(app_category, AppCategory::Other),
         }
     }
 }
@@ -176,6 +180,7 @@ impl App {
             Category::System,
             Category::Utility,
             Category::Game,
+            Category::Other,
         ];
 
         let category_buttons: Vec<Element<'_, Message>> = categories

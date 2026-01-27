@@ -58,12 +58,19 @@ pub fn scan_applications() -> Result<Vec<Application>> {
 
     let search_dirs = get_application_dirs();
 
-    for dir in search_dirs {
+    for dir in &search_dirs {
         if dir.exists() {
-            scan_directory(&dir, &mut apps, &mut seen_names)?;
+            eprintln!("[scan] Scanning: {:?}", dir);
+            match scan_directory(dir, &mut apps, &mut seen_names) {
+                Ok(_) => eprintln!("[scan] Found {} apps so far", apps.len()),
+                Err(e) => eprintln!("[scan] Error scanning {:?}: {}", dir, e),
+            }
+        } else {
+            eprintln!("[scan] Directory does not exist: {:?}", dir);
         }
     }
 
+    eprintln!("[scan] Total applications found: {}", apps.len());
     apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(apps)
 }
