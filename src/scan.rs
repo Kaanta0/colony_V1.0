@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 #[derive(Debug, Clone)]
 pub struct Application {
@@ -10,7 +10,6 @@ pub struct Application {
     pub exec: String,
     pub icon: Option<String>,
     pub category: AppCategory,
-    pub desktop_file: PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -24,32 +23,6 @@ pub enum AppCategory {
     Utility,
     Game,
     Other,
-}
-
-impl AppCategory {
-    fn from_categories(categories: &str) -> Self {
-        let cats: Vec<&str> = categories.split(';').collect();
-
-        if cats.iter().any(|c| matches!(*c, "Development" | "IDE")) {
-            AppCategory::Development
-        } else if cats.iter().any(|c| matches!(*c, "Graphics" | "Photography" | "2DGraphics" | "3DGraphics")) {
-            AppCategory::Graphics
-        } else if cats.iter().any(|c| matches!(*c, "Network" | "WebBrowser" | "Email" | "Chat")) {
-            AppCategory::Network
-        } else if cats.iter().any(|c| matches!(*c, "Office" | "WordProcessor" | "Spreadsheet")) {
-            AppCategory::Office
-        } else if cats.iter().any(|c| matches!(*c, "AudioVideo" | "Audio" | "Video" | "Player")) {
-            AppCategory::Multimedia
-        } else if cats.iter().any(|c| matches!(*c, "System" | "Settings" | "Monitor")) {
-            AppCategory::System
-        } else if cats.iter().any(|c| matches!(*c, "Utility" | "FileManager" | "Archiving")) {
-            AppCategory::Utility
-        } else if cats.iter().any(|c| matches!(*c, "Game")) {
-            AppCategory::Game
-        } else {
-            AppCategory::Other
-        }
-    }
 }
 
 pub fn scan_applications() -> Result<Vec<Application>> {
@@ -75,6 +48,30 @@ pub fn scan_applications() -> Result<Vec<Application>> {
     Ok(apps)
 }
 
+#[cfg(windows)]
+fn get_application_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    // Common Start Menu (all users)
+    if let Ok(programdata) = std::env::var("ProgramData") {
+        dirs.push(PathBuf::from(format!(
+            "{}\\Microsoft\\Windows\\Start Menu\\Programs",
+            programdata
+        )));
+    }
+
+    // User Start Menu
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        dirs.push(PathBuf::from(format!(
+            "{}\\Microsoft\\Windows\\Start Menu\\Programs",
+            appdata
+        )));
+    }
+
+    dirs
+}
+
+#[cfg(not(windows))]
 fn get_application_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
@@ -89,12 +86,11 @@ fn get_application_dirs() -> Vec<PathBuf> {
             dirs.push(PathBuf::from(format!("{}/applications", dir)));
         }
     } else {
-        // Default locations
         dirs.push(PathBuf::from("/usr/share/applications"));
         dirs.push(PathBuf::from("/usr/local/share/applications"));
     }
 
-    // Flatpak applications
+    // Flatpak
     dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
     if let Ok(home) = std::env::var("HOME") {
         dirs.push(PathBuf::from(format!(
@@ -103,7 +99,7 @@ fn get_application_dirs() -> Vec<PathBuf> {
         )));
     }
 
-    // Snap applications
+    // Snap
     dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
 
     dirs
@@ -114,18 +110,31 @@ fn scan_directory(
     apps: &mut Vec<Application>,
     seen: &mut HashMap<String, bool>,
 ) -> Result<()> {
-    let entries = fs::read_dir(dir).with_context(|| format!("Cannot read: {:?}", dir))?;
+    scan_directory_recursive(dir, apps, seen, 0)
+}
+
+fn scan_directory_recursive(
+    dir: &Path,
+    apps: &mut Vec<Application>,
+    seen: &mut HashMap<String, bool>,
+    depth: usize,
+) -> Result<()> {
+    if depth > 3 {
+        return Ok(());
+    }
+
+    let entries = fs::read_dir(dir)?;
 
     for entry in entries.flatten() {
         let path = entry.path();
 
-        if path.extension().is_some_and(|ext| ext == "desktop") {
-            if let Ok(app) = parse_desktop_file(&path) {
-                // Skip duplicates by name
-                if !seen.contains_key(&app.name) {
-                    seen.insert(app.name.clone(), true);
-                    apps.push(app);
-                }
+        if path.is_dir() {
+            // Recurse into subdirectories (for Start Menu folders)
+            let _ = scan_directory_recursive(&path, apps, seen, depth + 1);
+        } else if let Some(app) = parse_application_file(&path) {
+            if !seen.contains_key(&app.name) {
+                seen.insert(app.name.clone(), true);
+                apps.push(app);
             }
         }
     }
@@ -133,6 +142,134 @@ fn scan_directory(
     Ok(())
 }
 
+#[cfg(windows)]
+fn parse_application_file(path: &Path) -> Option<Application> {
+    let ext = path.extension()?.to_str()?;
+
+    if ext.eq_ignore_ascii_case("lnk") {
+        parse_lnk_file(path)
+    } else if ext.eq_ignore_ascii_case("exe") {
+        parse_exe_file(path)
+    } else {
+        None
+    }
+}
+
+#[cfg(windows)]
+fn parse_lnk_file(path: &Path) -> Option<Application> {
+    use lnk::ShellLink;
+
+    let lnk = ShellLink::open(path).ok()?;
+
+    // Get the name from the filename (without .lnk extension)
+    let name = path.file_stem()?.to_str()?.to_string();
+
+    // Skip certain system entries
+    if name.to_lowercase().contains("uninstall")
+        || name.to_lowercase().contains("readme")
+        || name.to_lowercase().contains("help")
+        || name.to_lowercase().contains("website")
+        || name.to_lowercase().contains("manual")
+    {
+        return None;
+    }
+
+    // Get the target executable path
+    let exec = lnk.relative_path().map(|p| p.to_string())
+        .or_else(|| lnk.link_info().as_ref()
+            .and_then(|li| li.local_base_path().map(|s| s.to_string())))?;
+
+    // Try to determine category from path
+    let category = categorize_windows_app(&name, &exec);
+
+    Some(Application {
+        name,
+        exec,
+        icon: None,
+        category,
+    })
+}
+
+#[cfg(windows)]
+fn parse_exe_file(path: &Path) -> Option<Application> {
+    let name = path.file_stem()?.to_str()?.to_string();
+    let exec = path.to_str()?.to_string();
+
+    Some(Application {
+        name,
+        exec,
+        icon: None,
+        category: AppCategory::Other,
+    })
+}
+
+#[cfg(windows)]
+fn categorize_windows_app(name: &str, exec: &str) -> AppCategory {
+    let lower_name = name.to_lowercase();
+    let lower_exec = exec.to_lowercase();
+
+    if lower_name.contains("code") || lower_name.contains("studio")
+        || lower_name.contains("developer") || lower_exec.contains("ide")
+        || lower_name.contains("python") || lower_name.contains("node")
+        || lower_name.contains("git") || lower_name.contains("terminal")
+    {
+        AppCategory::Development
+    } else if lower_name.contains("photoshop") || lower_name.contains("gimp")
+        || lower_name.contains("paint") || lower_name.contains("photo")
+        || lower_name.contains("image") || lower_name.contains("draw")
+    {
+        AppCategory::Graphics
+    } else if lower_name.contains("chrome") || lower_name.contains("firefox")
+        || lower_name.contains("edge") || lower_name.contains("browser")
+        || lower_name.contains("mail") || lower_name.contains("outlook")
+        || lower_name.contains("teams") || lower_name.contains("slack")
+        || lower_name.contains("discord") || lower_name.contains("zoom")
+    {
+        AppCategory::Network
+    } else if lower_name.contains("word") || lower_name.contains("excel")
+        || lower_name.contains("powerpoint") || lower_name.contains("office")
+        || lower_name.contains("libre") || lower_name.contains("calc")
+        || lower_name.contains("writer") || lower_name.contains("document")
+    {
+        AppCategory::Office
+    } else if lower_name.contains("spotify") || lower_name.contains("vlc")
+        || lower_name.contains("media") || lower_name.contains("player")
+        || lower_name.contains("music") || lower_name.contains("video")
+        || lower_name.contains("audio")
+    {
+        AppCategory::Multimedia
+    } else if lower_name.contains("settings") || lower_name.contains("control")
+        || lower_name.contains("system") || lower_name.contains("config")
+        || lower_name.contains("manager") || lower_name.contains("monitor")
+    {
+        AppCategory::System
+    } else if lower_name.contains("notepad") || lower_name.contains("calculator")
+        || lower_name.contains("util") || lower_name.contains("tool")
+        || lower_name.contains("7-zip") || lower_name.contains("winrar")
+    {
+        AppCategory::Utility
+    } else if lower_name.contains("game") || lower_name.contains("steam")
+        || lower_name.contains("epic") || lower_name.contains("play")
+        || lower_exec.contains("game")
+    {
+        AppCategory::Game
+    } else {
+        AppCategory::Other
+    }
+}
+
+#[cfg(not(windows))]
+fn parse_application_file(path: &Path) -> Option<Application> {
+    let ext = path.extension()?.to_str()?;
+
+    if ext == "desktop" {
+        parse_desktop_file(path).ok()
+    } else {
+        None
+    }
+}
+
+#[cfg(not(windows))]
 fn parse_desktop_file(path: &Path) -> Result<Application> {
     let content = fs::read_to_string(path)?;
 
@@ -172,7 +309,6 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         }
     }
 
-    // Skip hidden/nodisplay apps
     if no_display || hidden {
         anyhow::bail!("Application is hidden");
     }
@@ -184,19 +320,42 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         name,
         exec,
         icon,
-        category: AppCategory::from_categories(&categories),
-        desktop_file: path.to_path_buf(),
+        category: categorize_linux_app(&categories),
     })
 }
 
+#[cfg(not(windows))]
+fn categorize_linux_app(categories: &str) -> AppCategory {
+    let cats: Vec<&str> = categories.split(';').collect();
+
+    if cats.iter().any(|c| matches!(*c, "Development" | "IDE")) {
+        AppCategory::Development
+    } else if cats.iter().any(|c| matches!(*c, "Graphics" | "Photography" | "2DGraphics" | "3DGraphics")) {
+        AppCategory::Graphics
+    } else if cats.iter().any(|c| matches!(*c, "Network" | "WebBrowser" | "Email" | "Chat")) {
+        AppCategory::Network
+    } else if cats.iter().any(|c| matches!(*c, "Office" | "WordProcessor" | "Spreadsheet")) {
+        AppCategory::Office
+    } else if cats.iter().any(|c| matches!(*c, "AudioVideo" | "Audio" | "Video" | "Player")) {
+        AppCategory::Multimedia
+    } else if cats.iter().any(|c| matches!(*c, "System" | "Settings" | "Monitor")) {
+        AppCategory::System
+    } else if cats.iter().any(|c| matches!(*c, "Utility" | "FileManager" | "Archiving")) {
+        AppCategory::Utility
+    } else if cats.iter().any(|c| matches!(*c, "Game")) {
+        AppCategory::Game
+    } else {
+        AppCategory::Other
+    }
+}
+
+#[cfg(not(windows))]
 fn clean_exec(exec: &str) -> String {
-    // Remove field codes like %f, %F, %u, %U, etc.
     let mut result = String::new();
     let mut chars = exec.chars().peekable();
 
     while let Some(c) = chars.next() {
         if c == '%' {
-            // Skip the field code character
             chars.next();
         } else {
             result.push(c);

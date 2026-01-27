@@ -142,12 +142,23 @@ impl App {
             Message::LaunchApp(exec) => {
                 self.status_message = format!("Launching...");
 
-                // Parse the exec command and launch
-                let parts: Vec<&str> = exec.split_whitespace().collect();
-                if let Some((cmd, args)) = parts.split_first() {
-                    let _ = std::process::Command::new(cmd)
-                        .args(args)
+                #[cfg(windows)]
+                {
+                    // On Windows, use cmd /C start to launch
+                    let _ = std::process::Command::new("cmd")
+                        .args(["/C", "start", "", &exec])
                         .spawn();
+                }
+
+                #[cfg(not(windows))]
+                {
+                    // On Linux/macOS, parse and execute
+                    let parts: Vec<&str> = exec.split_whitespace().collect();
+                    if let Some((cmd, args)) = parts.split_first() {
+                        let _ = std::process::Command::new(cmd)
+                            .args(args)
+                            .spawn();
+                    }
                 }
             }
         }
