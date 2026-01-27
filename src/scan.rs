@@ -157,37 +157,24 @@ fn parse_application_file(path: &Path) -> Option<Application> {
 
 #[cfg(windows)]
 fn parse_lnk_file(path: &Path) -> Option<Application> {
-    use lnk::ShellLink;
-
-    let lnk = ShellLink::open(path).ok()?;
-
     // Get the name from the filename (without .lnk extension)
     let name = path.file_stem()?.to_str()?.to_string();
 
     // Skip certain system entries
-    if name.to_lowercase().contains("uninstall")
-        || name.to_lowercase().contains("readme")
-        || name.to_lowercase().contains("help")
-        || name.to_lowercase().contains("website")
-        || name.to_lowercase().contains("manual")
+    let lower = name.to_lowercase();
+    if lower.contains("uninstall")
+        || lower.contains("readme")
+        || lower.contains("help")
+        || lower.contains("website")
+        || lower.contains("manual")
+        || lower.contains("license")
     {
         return None;
     }
 
-    // Get the target executable path
-    let exec = if let Some(rel_path) = lnk.relative_path() {
-        rel_path.clone()
-    } else if let Some(link_info) = lnk.link_info().as_ref() {
-        if let Some(base_path) = link_info.local_base_path() {
-            base_path.to_string()
-        } else {
-            return None;
-        }
-    } else {
-        return None;
-    };
+    // Use the .lnk file path directly - Windows can execute it
+    let exec = path.to_str()?.to_string();
 
-    // Try to determine category from path
     let category = categorize_windows_app(&name, &exec);
 
     Some(Application {
