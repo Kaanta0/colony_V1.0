@@ -1,0 +1,62 @@
+import { Button, ListView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    title: "Colony";
+    width: 900px;
+    height: 600px;
+
+    in-out property <[string]> repositories;
+    in-out property <[string]> scan_paths;
+    in-out property <string> status_message;
+
+    callback rescan();
+
+    VerticalBox {
+        spacing: 16px;
+        padding: 24px;
+
+        Text {
+            text: "Colony Launcher";
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        HorizontalBox {
+            spacing: 12px;
+            Button {
+                text: "Relancer la détection";
+                clicked => {
+                    root.rescan();
+                }
+            }
+            Text {
+                text: root.status_message;
+                color: #6b7280;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: "Racines surveillées";
+            font-weight: 600;
+        }
+
+        ListView {
+            height: 100px;
+            for path in root.scan_paths : Text {
+                text: path;
+            }
+        }
+
+        Text {
+            text: "Repositories détectés";
+            font-weight: 600;
+        }
+
+        ListView {
+            for repo in root.repositories : Text {
+                text: repo;
+            }
+        }
+    }
+}

@@ -12,7 +12,7 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 
 - **Langage** : Rust
 - **Build** : Cargo (`Cargo.toml` + `Cargo.lock`)
-- **UI** : `iced` ou `slint` selon les besoins (décision ultérieure)
+- **UI** : `slint`
 
 ## Obligations à respecter (permanent)
 
@@ -36,7 +36,14 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 - Le dossier `tasks/` sert à suivre les tâches, décisions et actions à venir.
 - Chaque dossier dispose d’un fichier `.md` d’orientation.
 
-## Démarrage (à définir)
+## Démarrage
+
+```bash
+cargo run
+```
+
+La configuration par défaut est dans `config/colony.toml`. Vous pouvez pointer un autre fichier
+en définissant la variable d’environnement `COLONY_CONFIG`.
 
 Les instructions de build/exécution seront ajoutées une fois la base Rust en place.
 
