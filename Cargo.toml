@@ -4,10 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.100"
-serde = { version = "1.0.228", features = ["derive"] }
-slint = "1.14.1"
-toml = "0.9.11"
-
-[build-dependencies]
-slint-build = "1.14.1"
+anyhow = "1.0"
+iced = { version = "0.14.0", features = ["svg"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
