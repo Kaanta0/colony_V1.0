@@ -1,388 +1,31 @@
-import { LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
-
-component AppSurface inherits Rectangle {
-    in property <color> fill;
-    in property <color> stroke;
-    in property <length> radius;
-    in property <length> shadow_blur;
-    in property <length> shadow_offset;
-    in property <color> shadow_color;
-
-    background: fill;
-    border-width: 1px;
-    border-color: stroke;
-    border-radius: radius;
-    drop-shadow-blur: shadow_blur;
-    drop-shadow-offset-y: shadow_offset;
-    drop-shadow-color: shadow_color;
-}
-
-component SectionTitle inherits Text {
-    in property <color> title_color;
-    in property <length> size;
-
-    font-size: size;
-    font-weight: 700;
-    color: title_color;
-}
-
-component PrimaryButton inherits Rectangle {
-    in property <string> label;
-    in property <color> fill;
-    in property <color> label_color;
-    in property <color> hover_fill;
-    in property <color> pressed_fill;
-    in property <color> stroke_color;
-    in property <length> radius;
-    in property <length> label_size;
-    callback clicked();
-
-    background: fill;
-    border-radius: radius;
-    border-width: 1px;
-    border-color: root.stroke_color;
-    padding: 10px;
-
-    button_touch := TouchArea {
-        clicked => {
-            root.clicked();
-        }
-    }
-
-    states [
-        hovered when button_touch.has_hover : {
-            background: hover_fill;
-        }
-        pressed when button_touch.pressed : {
-            background: pressed_fill;
-        }
-    ]
-
-    Text {
-        text: root.label;
-        color: root.label_color;
-        font-size: root.label_size;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: parent.width;
-        height: parent.height;
-    }
-}
-
-component SecondaryButton inherits Rectangle {
-    in property <string> label;
-    in property <color> fill;
-    in property <color> label_color;
-    in property <color> hover_fill;
-    in property <color> pressed_fill;
-    in property <color> stroke_color;
-    in property <length> radius;
-    in property <length> label_size;
-    callback clicked();
-
-    background: fill;
-    border-radius: radius;
-    border-width: 1px;
-    border-color: root.stroke_color;
-    padding: 10px;
-
-    button_touch := TouchArea {
-        clicked => {
-            root.clicked();
-        }
-    }
-
-    states [
-        hovered when button_touch.has_hover : {
-            background: hover_fill;
-        }
-        pressed when button_touch.pressed : {
-            background: pressed_fill;
-        }
-    ]
-
-    Text {
-        text: root.label;
-        color: root.label_color;
-        font-size: root.label_size;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: parent.width;
-        height: parent.height;
-    }
-}
-
-component SearchField inherits Rectangle {
-    in-out property <string> text;
-    in property <color> fill;
-    in property <color> border;
-    in property <color> focus_border;
-    in property <length> radius;
-    in property <string> placeholder;
-    in property <length> font_size;
-
-    background: fill;
-    border-width: 1px;
-    border-color: border;
-    border-radius: radius;
-    padding: 4px;
-
-    states [
-        focused when input.has-focus : {
-            border-color: focus_border;
-        }
-    ]
-
-    input := LineEdit {
-        text <=> root.text;
-        placeholder-text: root.placeholder;
-        font-size: root.font_size;
-    }
-}
-
-component FilterItem inherits Rectangle {
-    in property <string> label;
-    in property <bool> active;
-    in property <color> text_color;
-    in property <color> active_color;
-    in property <color> hover_color;
-    in property <color> indicator_fill;
-    in property <color> indicator_border;
-    in property <length> indicator_radius;
-    property <color> current_color: root.active ? active_color : text_color;
-
-    background: transparent;
-    height: 24px;
-
-    touch := TouchArea {}
-
-    states [
-        hovered when touch.has_hover : {
-            current_color: hover_color;
-        }
-        active when root.active : {
-            current_color: active_color;
-        }
-    ]
-
-    HorizontalBox {
-        spacing: 8px;
-
-        Rectangle {
-            width: 16px;
-            height: 16px;
-            border-radius: indicator_radius;
-            background: indicator_fill;
-            border-width: 1px;
-            border-color: indicator_border;
-
-            Text {
-                text: root.active ? "✓" : "";
-                color: root.current_color;
-                font-size: 10px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: parent.width;
-                height: parent.height;
-            }
-        }
-
-        Text {
-            text: root.label;
-            color: root.current_color;
-            font-size: 13px;
-        }
-    }
-}
-
-component Tag inherits Rectangle {
-    in property <string> label;
-    in property <color> fill;
-    in property <color> text_color;
-    in property <color> border;
-
-    height: 22px;
-    border-radius: 999px;
-    border-width: 1px;
-    border-color: border;
-    background: fill;
-
-    Text {
-        text: label;
-        color: text_color;
-        font-size: 11px;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: parent.width;
-        height: parent.height;
-    }
-}
-
-component StatusPill inherits Rectangle {
-    in property <string> label;
-    in property <color> fill;
-    in property <color> text_color;
-    in property <color> border;
-
-    height: 22px;
-    border-radius: 999px;
-    border-width: 1px;
-    border-color: border;
-    background: fill;
-
-    Text {
-        text: label;
-        color: text_color;
-        font-size: 11px;
-        font-weight: 600;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        width: parent.width;
-        height: parent.height;
-    }
-}
+import { Button, CheckBox, LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
 component AppCard inherits Rectangle {
-    in property <string> title;
-    in property <string> subtitle;
-    in property <string> status;
-    in property <string> icon;
-    in property <color> fill;
-    in property <color> hover_fill;
-    in property <color> border;
-    in property <color> accent;
-    in property <color> text_primary;
-    in property <color> text_secondary;
-    in property <length> shadow_blur;
-    in property <length> shadow_offset;
-    in property <color> shadow_color;
-    in property <length> shadow_hover_blur;
-    in property <length> shadow_hover_offset;
-    in property <color> shadow_hover_color;
+    in property <string> label;
 
-    height: 108px;
-    width: 180px;
-    background: fill;
+    height: 64px;
     border-width: 1px;
-    border-color: border;
-    border-radius: 16px;
-    drop-shadow-blur: shadow_blur;
-    drop-shadow-offset-y: shadow_offset;
-    drop-shadow-color: shadow_color;
+    border-color: #1f2937;
+    border-radius: 10px;
+    background: #111827;
 
-    touch := TouchArea {
+    Text {
+        text: label;
+        color: #e2e8f0;
+        font-size: 14px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
         width: parent.width;
         height: parent.height;
-    }
-
-    states [
-        hovered when touch.has_hover : {
-            background: hover_fill;
-            border-color: accent;
-            drop-shadow-blur: shadow_hover_blur;
-            drop-shadow-offset-y: shadow_hover_offset;
-            drop-shadow-color: shadow_hover_color;
-        }
-        pressed when touch.pressed : {
-            background: hover_fill;
-            border-color: accent;
-            drop-shadow-blur: shadow_hover_blur;
-            drop-shadow-offset-y: shadow_hover_offset;
-            drop-shadow-color: shadow_hover_color;
-        }
-    ]
-
-    HorizontalBox {
-        spacing: 12px;
-        padding: 14px;
-
-        Rectangle {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: accent;
-            opacity: 0.14;
-
-            Text {
-                text: icon;
-                color: accent;
-                font-size: 18px;
-                font-weight: 700;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: parent.width;
-                height: parent.height;
-            }
-        }
-
-        VerticalBox {
-            spacing: 4px;
-
-            Text {
-                text: title;
-                color: text_primary;
-                font-size: 14px;
-                font-weight: 700;
-            }
-
-            Text {
-                text: subtitle;
-                color: text_secondary;
-                font-size: 12px;
-            }
-
-            StatusPill {
-                label: status;
-                fill: accent;
-                text_color: text_primary;
-                border: accent;
-                width: 78px;
-            }
-        }
     }
 }
 
 export component AppWindow inherits Window {
     title: "Colony";
-    width: 980px;
-    height: 640px;
-
-    property <color> bg_main: #0b1120;
-    property <color> bg_surface: #0f172a;
-    property <color> bg_card: #111827;
-    property <color> border: #1e293b;
-    property <color> accent: #38bdf8;
-    property <color> text_primary: #f8fafc;
-    property <color> text_secondary: #cbd5f5;
-    property <color> text_muted: #94a3b8;
-
-    property <length> title_size: 20px;
-    property <length> section_size: 16px;
-    property <length> body_size: 14px;
-    property <length> meta_size: 12px;
-
-    property <length> space_1: 4px;
-    property <length> space_2: 8px;
-    property <length> space_3: 12px;
-    property <length> space_4: 16px;
-    property <length> space_5: 20px;
-    property <length> space_6: 24px;
-
-    property <length> radius_sm: 10px;
-    property <length> radius_md: 14px;
-    property <length> radius_lg: 18px;
-
-    property <length> shadow_sm: 12px;
-    property <length> shadow_md: 20px;
-    property <length> shadow_sm_offset: 4px;
-    property <length> shadow_md_offset: 8px;
-    property <color> shadow_sm_color: #02061755;
-    property <color> shadow_md_color: #02061788;
-
-    background: bg_main;
+    width: 900px;
+    height: 600px;
+    background: #0b1120;
 
     in-out property <[string]> repositories;
     in-out property <[string]> scan_paths;
@@ -391,75 +34,43 @@ export component AppWindow inherits Window {
     callback rescan();
 
     VerticalBox {
-        spacing: space_4;
-        padding: space_6;
+        spacing: 18px;
+        padding: 24px;
 
-        AppSurface {
-            fill: bg_surface;
-            stroke: border;
-            radius: radius_md;
-            shadow_blur: shadow_sm;
-            shadow_offset: shadow_sm_offset;
-            shadow_color: shadow_sm_color;
-            height: 64px;
+        Rectangle {
+            height: 56px;
+            border-width: 1px;
+            border-color: #1f2937;
+            border-radius: 14px;
+            background: #111827;
 
-                HorizontalBox {
-                    spacing: space_4;
-                    padding: space_4;
+            HorizontalBox {
+                spacing: 16px;
+                padding: 12px;
 
-                SearchField {
-                    width: 240px;
-                    fill: bg_card;
-                    border: border;
-                    focus_border: accent;
-                    radius: radius_sm;
-                    placeholder: "Search apps";
-                    font_size: body_size;
+                LineEdit {
+                    width: 220px;
+                    placeholder-text: "Search";
                 }
 
-                SecondaryButton {
-                    label: "Filters";
-                    fill: bg_card;
-                    label_color: text_secondary;
-                    hover_fill: #152238;
-                    pressed_fill: #1b2d4a;
-                    stroke_color: border;
-                    radius: radius_sm;
-                    label_size: body_size;
+                Text {
+                    text: "— Apps —";
+                    color: #cbd5f5;
+                    vertical-alignment: center;
                 }
 
                 HorizontalBox {
-                    spacing: space_2;
-
+                    spacing: 8px;
                     Text {
                         text: "Quick Actions";
-                        color: text_secondary;
-                        font-size: meta_size;
+                        color: #cbd5f5;
+                        vertical-alignment: center;
                     }
-
-                    PrimaryButton {
-                        label: "Rescan";
-                        fill: accent;
-                        hover_fill: #5fd0ff;
-                        pressed_fill: #1aa7e1;
-                        label_color: #0b1120;
-                        stroke_color: accent;
-                        radius: radius_sm;
-                        label_size: body_size;
+                    Button {
+                        text: "Rescan";
                         clicked => {
                             root.rescan();
                         }
-                    }
-
-                    SecondaryButton {
-                        label: "Settings";
-                        fill: bg_card;
-                        hover_fill: #152238;
-                        pressed_fill: #1b2d4a;
-                        label_color: text_secondary;
-                        stroke_color: border;
-                        radius: radius_sm;
-                        label_size: body_size;
                     }
                 }
 
@@ -468,483 +79,154 @@ export component AppWindow inherits Window {
                     background: transparent;
                 }
 
-                StatusPill {
-                    label: "12:42 UTC";
-                    fill: bg_card;
-                    text_color: text_secondary;
-                    border: border;
-                    width: 96px;
+                Text {
+                    text: "12:42 UTC";
+                    color: #cbd5f5;
+                    vertical-alignment: center;
                 }
             }
         }
 
         HorizontalBox {
-            spacing: space_4;
+            spacing: 18px;
 
-            AppSurface {
-                width: 240px;
-                fill: bg_surface;
-                stroke: border;
-                radius: radius_md;
-                shadow_blur: shadow_sm;
-                shadow_offset: shadow_sm_offset;
-                shadow_color: shadow_sm_color;
+            Rectangle {
+                width: 220px;
+                border-width: 1px;
+                border-color: #1f2937;
+                border-radius: 14px;
+                background: #0f172a;
 
                 VerticalBox {
-                    spacing: space_4;
-                    padding: space_4;
+                    spacing: 12px;
+                    padding: 16px;
 
-                    SectionTitle {
-                        text: "Filters";
-                        title_color: text_primary;
-                        size: section_size;
+                    Text {
+                        text: "FILTERS";
+                        color: #e2e8f0;
+                        font-weight: 700;
                     }
 
                     Rectangle {
                         height: 1px;
-                        background: border;
+                        background: #1f2937;
                     }
 
-                    VerticalBox {
-                        spacing: space_3;
-
-                        HorizontalBox {
-                            spacing: space_2;
-                            filter_all := FilterItem {
-                                label: "All Apps";
-                                active: true;
-                                text_color: text_secondary;
-                                active_color: accent;
-                                hover_color: text_primary;
-                                indicator_fill: bg_card;
-                                indicator_border: border;
-                                indicator_radius: 4px;
-                            }
-
-                            Tag {
-                                label: "12";
-                                fill: filter_all.active ? accent : bg_card;
-                                text_color: filter_all.active ? #0b1120 : text_secondary;
-                                border: filter_all.active ? accent : border;
-                                width: 40px;
-                            }
-                        }
-
-                        HorizontalBox {
-                            spacing: space_2;
-                            filter_nav := FilterItem {
-                                label: "Navigation";
-                                active: false;
-                                text_color: text_secondary;
-                                active_color: accent;
-                                hover_color: text_primary;
-                                indicator_fill: bg_card;
-                                indicator_border: border;
-                                indicator_radius: 4px;
-                            }
-
-                            Tag {
-                                label: "5";
-                                fill: filter_nav.active ? accent : bg_card;
-                                text_color: filter_nav.active ? #0b1120 : text_secondary;
-                                border: filter_nav.active ? accent : border;
-                                width: 40px;
-                            }
-                        }
-
-                        HorizontalBox {
-                            spacing: space_2;
-                            filter_control := FilterItem {
-                                label: "Control";
-                                active: false;
-                                text_color: text_secondary;
-                                active_color: accent;
-                                hover_color: text_primary;
-                                indicator_fill: bg_card;
-                                indicator_border: border;
-                                indicator_radius: 4px;
-                            }
-
-                            Tag {
-                                label: "4";
-                                fill: filter_control.active ? accent : bg_card;
-                                text_color: filter_control.active ? #0b1120 : text_secondary;
-                                border: filter_control.active ? accent : border;
-                                width: 40px;
-                            }
-                        }
-
-                        HorizontalBox {
-                            spacing: space_2;
-                            filter_sensors := FilterItem {
-                                label: "Sensors";
-                                active: false;
-                                text_color: text_secondary;
-                                active_color: accent;
-                                hover_color: text_primary;
-                                indicator_fill: bg_card;
-                                indicator_border: border;
-                                indicator_radius: 4px;
-                            }
-
-                            Tag {
-                                label: "3";
-                                fill: filter_sensors.active ? accent : bg_card;
-                                text_color: filter_sensors.active ? #0b1120 : text_secondary;
-                                border: filter_sensors.active ? accent : border;
-                                width: 40px;
-                            }
-                        }
-
-                        HorizontalBox {
-                            spacing: space_2;
-                            filter_systems := FilterItem {
-                                label: "Systems";
-                                active: false;
-                                text_color: text_secondary;
-                                active_color: accent;
-                                hover_color: text_primary;
-                                indicator_fill: bg_card;
-                                indicator_border: border;
-                                indicator_radius: 4px;
-                            }
-
-                            Tag {
-                                label: "6";
-                                fill: filter_systems.active ? accent : bg_card;
-                                text_color: filter_systems.active ? #0b1120 : text_secondary;
-                                border: filter_systems.active ? accent : border;
-                                width: 40px;
-                            }
-                        }
+                    CheckBox {
+                        text: "All Apps";
+                        checked: true;
+                    }
+                    CheckBox {
+                        text: "Navigation";
+                    }
+                    CheckBox {
+                        text: "Control";
+                    }
+                    CheckBox {
+                        text: "Sensors";
+                    }
+                    CheckBox {
+                        text: "Systems";
                     }
                 }
             }
 
-            AppSurface {
-                fill: bg_surface;
-                stroke: border;
-                radius: radius_md;
-                shadow_blur: shadow_sm;
-                shadow_offset: shadow_sm_offset;
-                shadow_color: shadow_sm_color;
+            Rectangle {
+                border-width: 1px;
+                border-color: #1f2937;
+                border-radius: 14px;
+                background: #0f172a;
                 horizontal-stretch: 1;
 
                 VerticalBox {
-                    spacing: space_4;
-                    padding: space_4;
+                    spacing: 12px;
+                    padding: 16px;
 
-                    HorizontalBox {
-                        spacing: space_4;
-
-                        SectionTitle {
-                            text: "Applications";
-                            title_color: text_primary;
-                            size: section_size;
-                        }
-
-                        Tag {
-                            label: "Card Grid";
-                            fill: bg_card;
-                            text_color: text_secondary;
-                            border: border;
-                            width: 72px;
-                        }
-
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            background: transparent;
-                        }
-
-                        Text {
-                            text: "Updated 2m ago";
-                            color: text_muted;
-                            font-size: meta_size;
-                        }
+                    Text {
+                        text: "CARD VIEW / GRID";
+                        color: #e2e8f0;
+                        font-weight: 700;
                     }
 
                     Rectangle {
                         height: 1px;
-                        background: border;
+                        background: #1f2937;
                     }
 
-                    VerticalBox {
-                        spacing: space_3;
+                    HorizontalBox {
+                        spacing: 12px;
+                        AppCard { label: "ECDIS"; }
+                        AppCard { label: "Radar"; }
+                        AppCard { label: "Conning"; }
+                    }
 
-                        HorizontalBox {
-                            spacing: space_3;
-                            AppCard {
-                                title: "ECDIS";
-                                subtitle: "Navigation";
-                                status: "Online";
-                                icon: "🧭";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Radar";
-                                subtitle: "Navigation";
-                                status: "Ready";
-                                icon: "📡";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Conning";
-                                subtitle: "Control";
-                                status: "Live";
-                                icon: "🎛";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                        }
+                    HorizontalBox {
+                        spacing: 12px;
+                        AppCard { label: "Nav St."; }
+                        AppCard { label: "Speed Log"; }
+                        AppCard { label: "DP"; }
+                    }
 
-                        HorizontalBox {
-                            spacing: space_3;
-                            AppCard {
-                                title: "Nav St.";
-                                subtitle: "Systems";
-                                status: "Idle";
-                                icon: "🧭";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Speed Log";
-                                subtitle: "Sensors";
-                                status: "Online";
-                                icon: "⏱";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "DP";
-                                subtitle: "Control";
-                                status: "Standby";
-                                icon: "📍";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                        }
+                    HorizontalBox {
+                        spacing: 12px;
+                        AppCard { label: "Thruster"; }
+                        AppCard { label: "Joystick"; }
+                        AppCard { label: "Echo"; }
+                    }
 
-                        HorizontalBox {
-                            spacing: space_3;
-                            AppCard {
-                                title: "Thruster";
-                                subtitle: "Systems";
-                                status: "Online";
-                                icon: "🌀";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Joystick";
-                                subtitle: "Control";
-                                status: "Live";
-                                icon: "🕹";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Echo";
-                                subtitle: "Sensors";
-                                status: "Idle";
-                                icon: "📶";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                        }
-
-                        HorizontalBox {
-                            spacing: space_3;
-                            AppCard {
-                                title: "Lights";
-                                subtitle: "Systems";
-                                status: "Ready";
-                                icon: "💡";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Screen Ctrl";
-                                subtitle: "Systems";
-                                status: "Live";
-                                icon: "🖥";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                            AppCard {
-                                title: "Sys";
-                                subtitle: "Systems";
-                                status: "Idle";
-                                icon: "⚙";
-                                fill: bg_card;
-                                hover_fill: #16213a;
-                                border: border;
-                                accent: accent;
-                                text_primary: text_primary;
-                                text_secondary: text_secondary;
-                                shadow_blur: shadow_sm;
-                                shadow_offset: shadow_sm_offset;
-                                shadow_color: shadow_sm_color;
-                                shadow_hover_blur: shadow_md;
-                                shadow_hover_offset: shadow_md_offset;
-                                shadow_hover_color: shadow_md_color;
-                            }
-                        }
+                    HorizontalBox {
+                        spacing: 12px;
+                        AppCard { label: "Lights"; }
+                        AppCard { label: "Screen Ctrl"; }
+                        AppCard { label: "Sys"; }
                     }
                 }
             }
         }
 
-        AppSurface {
-            fill: bg_surface;
-            stroke: border;
-            radius: radius_md;
-            shadow_blur: shadow_sm;
-            shadow_offset: shadow_sm_offset;
-            shadow_color: shadow_sm_color;
-            height: 64px;
+        Rectangle {
+            height: 66px;
+            border-width: 1px;
+            border-color: #1f2937;
+            border-radius: 14px;
+            background: #111827;
 
-            HorizontalBox {
-                spacing: space_3;
-                padding: space_3;
+            VerticalBox {
+                spacing: 6px;
+                padding: 12px;
 
                 Text {
-                    text: "↑ Recommended: Radar, DP, Thruster";
-                    color: text_secondary;
-                    font-size: body_size;
+                    text: "↑ Recommended for you: Radar, DP, Thruster";
+                    color: #cbd5f5;
                 }
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: transparent;
-                }
+                HorizontalBox {
+                    spacing: 12px;
 
-                StatusPill {
-                    label: "Active: Online";
-                    fill: accent;
-                    text_color: #0b1120;
-                    border: accent;
-                    width: 120px;
-                }
+                    Text {
+                        text: "● Active: Online";
+                        color: #cbd5f5;
+                    }
 
-                StatusPill {
-                    label: root.status_message;
-                    fill: bg_card;
-                    text_color: text_muted;
-                    border: border;
-                    width: 180px;
+                    Text {
+                        text: "•";
+                        color: #475569;
+                    }
+
+                    Text {
+                        text: "⚙ Settings";
+                        color: #cbd5f5;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: transparent;
+                    }
+
+                    Text {
+                        text: root.status_message;
+                        color: #94a3b8;
+                    }
                 }
             }
         }
