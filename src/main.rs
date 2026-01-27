@@ -1,4 +1,3 @@
-mod config;
 mod scan;
 
 use iced::widget::{
@@ -6,8 +5,7 @@ use iced::widget::{
 };
 use iced::{color, Element, Fill, Font, Length, Theme};
 
-use config::Config;
-use scan::Repository;
+use scan::{AppCategory, Application};
 
 pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
@@ -17,33 +15,59 @@ pub fn main() -> iced::Result {
         .run()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Category {
     All,
-    Favorites,
-    Recent,
-    Dev,
-    Work,
+    Development,
+    Graphics,
+    Network,
+    Office,
+    Multimedia,
+    System,
+    Utility,
+    Game,
 }
 
 impl Category {
     fn label(&self) -> &'static str {
         match self {
             Category::All => "All",
-            Category::Favorites => "Favorites",
-            Category::Recent => "Recent",
-            Category::Dev => "Dev",
-            Category::Work => "Work",
+            Category::Development => "Development",
+            Category::Graphics => "Graphics",
+            Category::Network => "Network",
+            Category::Office => "Office",
+            Category::Multimedia => "Multimedia",
+            Category::System => "System",
+            Category::Utility => "Utilities",
+            Category::Game => "Games",
         }
     }
 
     fn icon(&self) -> &'static str {
         match self {
             Category::All => "*",
-            Category::Favorites => "#",
-            Category::Recent => "@",
-            Category::Dev => "/",
-            Category::Work => "~",
+            Category::Development => "</>",
+            Category::Graphics => "~",
+            Category::Network => "@",
+            Category::Office => "#",
+            Category::Multimedia => ">",
+            Category::System => "$",
+            Category::Utility => "%",
+            Category::Game => "^",
+        }
+    }
+
+    fn matches(&self, app_category: &AppCategory) -> bool {
+        match self {
+            Category::All => true,
+            Category::Development => matches!(app_category, AppCategory::Development),
+            Category::Graphics => matches!(app_category, AppCategory::Graphics),
+            Category::Network => matches!(app_category, AppCategory::Network),
+            Category::Office => matches!(app_category, AppCategory::Office),
+            Category::Multimedia => matches!(app_category, AppCategory::Multimedia),
+            Category::System => matches!(app_category, AppCategory::System),
+            Category::Utility => matches!(app_category, AppCategory::Utility),
+            Category::Game => matches!(app_category, AppCategory::Game),
         }
     }
 }
@@ -55,8 +79,7 @@ impl Default for Category {
 }
 
 struct App {
-    config: Config,
-    repositories: Vec<Repository>,
+    applications: Vec<Application>,
     search_query: String,
     selected_category: Category,
     status_message: String,
@@ -64,27 +87,15 @@ struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let config = Config::load().unwrap_or_else(|e| {
-            eprintln!("Config error: {e}");
-            Config {
-                scan: config::ScanConfig {
-                    directories: vec![],
-                    max_depth: 2,
-                    interval_seconds: 0,
-                },
-            }
-        });
-
-        let repositories = scan::scan_repositories(&config).unwrap_or_else(|e| {
+        let applications = scan::scan_applications().unwrap_or_else(|e| {
             eprintln!("Scan error: {e}");
             Vec::new()
         });
 
-        let status_message = format!("{} repositories found", repositories.len());
+        let status_message = format!("{} applications found", applications.len());
 
         Self {
-            config,
-            repositories,
+            applications,
             search_query: String::new(),
             selected_category: Category::All,
             status_message,
@@ -97,7 +108,7 @@ enum Message {
     SearchChanged(String),
     CategorySelected(Category),
     Rescan,
-    OpenRepository(String),
+    LaunchApp(String),
 }
 
 impl App {
@@ -114,24 +125,26 @@ impl App {
                 self.selected_category = category;
             }
             Message::Rescan => {
-                match scan::scan_repositories(&self.config) {
-                    Ok(repos) => {
-                        self.status_message = format!("{} repositories found", repos.len());
-                        self.repositories = repos;
+                match scan::scan_applications() {
+                    Ok(apps) => {
+                        self.status_message = format!("{} applications found", apps.len());
+                        self.applications = apps;
                     }
                     Err(e) => {
                         self.status_message = format!("Error: {e}");
                     }
                 }
             }
-            Message::OpenRepository(path) => {
-                self.status_message = format!("Opening: {path}");
-                #[cfg(target_os = "linux")]
-                let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
-                #[cfg(target_os = "macos")]
-                let _ = std::process::Command::new("open").arg(&path).spawn();
-                #[cfg(target_os = "windows")]
-                let _ = std::process::Command::new("explorer").arg(&path).spawn();
+            Message::LaunchApp(exec) => {
+                self.status_message = format!("Launching...");
+
+                // Parse the exec command and launch
+                let parts: Vec<&str> = exec.split_whitespace().collect();
+                if let Some((cmd, args)) = parts.split_first() {
+                    let _ = std::process::Command::new(cmd)
+                        .args(args)
+                        .spawn();
+                }
             }
         }
     }
@@ -155,13 +168,17 @@ impl App {
 
         let categories = [
             Category::All,
-            Category::Favorites,
-            Category::Recent,
-            Category::Dev,
-            Category::Work,
+            Category::Development,
+            Category::Graphics,
+            Category::Network,
+            Category::Office,
+            Category::Multimedia,
+            Category::System,
+            Category::Utility,
+            Category::Game,
         ];
 
-        let category_buttons: Vec<Element<Message>> = categories
+        let category_buttons: Vec<Element<'_, Message>> = categories
             .into_iter()
             .map(|cat| self.view_category_button(cat))
             .collect();
@@ -182,7 +199,7 @@ impl App {
         ]
         .spacing(8)
         .padding(16)
-        .width(180);
+        .width(200);
 
         container(sidebar_content)
             .style(|_theme| container::Style {
@@ -194,16 +211,9 @@ impl App {
     }
 
     fn view_category_button(&self, category: Category) -> Element<'_, Message> {
-        let is_selected = matches!(
-            (&self.selected_category, &category),
-            (Category::All, Category::All)
-                | (Category::Favorites, Category::Favorites)
-                | (Category::Recent, Category::Recent)
-                | (Category::Dev, Category::Dev)
-                | (Category::Work, Category::Work)
-        );
+        let is_selected = self.selected_category == category;
 
-        let label = text(format!("{}  {}", category.icon(), category.label())).size(14);
+        let label = text(format!("{} {}", category.icon(), category.label())).size(14);
 
         let btn = button(label)
             .on_press(Message::CategorySelected(category))
@@ -231,7 +241,7 @@ impl App {
     }
 
     fn view_content(&self) -> Element<'_, Message> {
-        let search = text_input("Search projects...", &self.search_query)
+        let search = text_input("Search applications...", &self.search_query)
             .on_input(Message::SearchChanged)
             .padding(12)
             .size(16)
@@ -245,12 +255,12 @@ impl App {
             .spacing(16)
             .align_y(iced::Alignment::Center);
 
-        let repo_grid = self.view_repository_grid();
+        let app_grid = self.view_app_grid();
 
         let content = column![
             header,
             container(text("")).height(16),
-            repo_grid
+            app_grid
         ]
         .spacing(8)
         .padding(24)
@@ -266,12 +276,12 @@ impl App {
             .into()
     }
 
-    fn view_repository_grid(&self) -> Element<'_, Message> {
-        let filtered: Vec<&Repository> = self.filtered_repositories();
+    fn view_app_grid(&self) -> Element<'_, Message> {
+        let filtered: Vec<&Application> = self.filtered_applications();
 
         if filtered.is_empty() {
             return container(
-                text("No repositories found")
+                text("No applications found")
                     .size(16)
                     .color(color!(0x666677)),
             )
@@ -282,51 +292,55 @@ impl App {
             .into();
         }
 
-        let mut rows: Vec<Element<Message>> = Vec::new();
+        let mut rows: Vec<Element<'_, Message>> = Vec::new();
 
-        for chunk in filtered.chunks(3) {
-            let mut row_items: Vec<Element<Message>> = Vec::new();
+        for chunk in filtered.chunks(4) {
+            let mut row_items: Vec<Element<'_, Message>> = Vec::new();
 
-            for repo in chunk {
-                row_items.push(Self::view_repo_card(repo));
+            for app in chunk {
+                row_items.push(Self::view_app_card(app));
             }
 
-            while row_items.len() < 3 {
+            while row_items.len() < 4 {
                 row_items.push(container(column![]).width(Fill).into());
             }
 
-            rows.push(Row::with_children(row_items).spacing(16).into());
+            rows.push(Row::with_children(row_items).spacing(12).into());
         }
 
-        let grid = Column::with_children(rows).spacing(16);
+        let grid = Column::with_children(rows).spacing(12);
 
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_repo_card(repo: &Repository) -> Element<'_, Message> {
-        let icon = text("/")
-            .size(24)
+    fn view_app_card(app: &Application) -> Element<'_, Message> {
+        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
+
+        let icon = text(icon_char.to_string())
+            .size(32)
             .font(Font::MONOSPACE)
-            .color(color!(0x6c6c8a));
+            .color(color!(0x8888ff));
 
-        let name = text(repo.name.clone()).size(16).color(color!(0xffffff));
-
-        let path = text(repo.display_path.clone())
-            .size(12)
-            .color(color!(0x666677));
+        let name = text(app.name.clone())
+            .size(13)
+            .color(color!(0xffffff));
 
         let card_content = column![
-            icon,
+            container(icon)
+                .width(Fill)
+                .center_x(Fill),
             container(text("")).height(8),
-            name,
-            path,
+            container(name)
+                .width(Fill)
+                .center_x(Fill),
         ]
         .spacing(4)
-        .padding(16);
+        .padding(16)
+        .width(Fill);
 
-        let repo_path = repo.path.clone();
+        let exec = app.exec.clone();
         button(card_content)
-            .on_press(Message::OpenRepository(repo_path))
+            .on_press(Message::LaunchApp(exec))
             .padding(0)
             .width(Fill)
             .style(|_theme, status| {
@@ -338,23 +352,27 @@ impl App {
                 button::Style {
                     background: Some(bg.into()),
                     text_color: color!(0xffffff),
-                    border: iced::Border::default().rounded(8),
+                    border: iced::Border::default().rounded(12),
                     ..Default::default()
                 }
             })
             .into()
     }
 
-    fn filtered_repositories(&self) -> Vec<&Repository> {
+    fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
-        self.repositories
+        self.applications
             .iter()
-            .filter(|repo| {
+            .filter(|app| {
+                // Category filter
+                if !self.selected_category.matches(&app.category) {
+                    return false;
+                }
+                // Search filter
                 if query.is_empty() {
                     return true;
                 }
-                repo.name.to_lowercase().contains(&query)
-                    || repo.display_path.to_lowercase().contains(&query)
+                app.name.to_lowercase().contains(&query)
             })
             .collect()
     }
