@@ -175,9 +175,17 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
     }
 
     // Get the target executable path
-    let exec = lnk.relative_path().map(|p| p.to_string())
-        .or_else(|| lnk.link_info().as_ref()
-            .and_then(|li| li.local_base_path().map(|s| s.to_string())))?;
+    let exec = if let Some(rel_path) = lnk.relative_path() {
+        rel_path.clone()
+    } else if let Some(link_info) = lnk.link_info().as_ref() {
+        if let Some(base_path) = link_info.local_base_path() {
+            base_path.to_string()
+        } else {
+            return None;
+        }
+    } else {
+        return None;
+    };
 
     // Try to determine category from path
     let category = categorize_windows_app(&name, &exec);
