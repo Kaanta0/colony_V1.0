@@ -8,6 +8,13 @@ Ce dossier sert à suivre les tâches, décisions et actions futures liées au p
 - Lister les priorités et prochaines étapes.
 - Documenter l’avancement du projet.
 
+## Priorités actuelles
+
+- Réactivité et faible consommation **CPU/RAM/disque**.
+- Approche **asynchrone** pour limiter la charge sur Colony.
+- Modules activés **uniquement à l’usage**.
+- Appels réseau **par API**.
+
 ## Format recommandé (à adapter)
 
 - [ ] Tâche à faire

@@ -18,6 +18,10 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 
 - Utiliser **uniquement les dernières versions** de Rust et des librairies/dépendances.
 - Minimiser au maximum le **hardcodage** : tout ce qui est structurel doit être défini via configuration.
+- Prioriser la **réactivité** et les usages **CPU/RAM/disque** faibles.
+- Favoriser l’**asynchrone** pour éviter de surcharger Colony.
+- Activer les modules **uniquement au moment de leur utilisation**.
+- Effectuer les appels réseau **via API**.
 
 ## Structure du dépôt
 
