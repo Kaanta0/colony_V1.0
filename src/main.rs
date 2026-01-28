@@ -131,11 +131,19 @@ impl App {
             Task::batch([
                 font_assets.load_task(),
                 Task::perform(
-                    github::scan_mothersphere_colony_software(),
+                    async {
+                        github::scan_mothersphere_colony_software()
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
                     Message::GithubScanFinished,
                 ),
                 Task::perform(
-                    colony_apps::scan_colony_applications(),
+                    async {
+                        colony_apps::scan_colony_applications()
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
                     Message::ColonyAppsScanFinished,
                 ),
             ]),
@@ -151,9 +159,9 @@ enum Message {
     LaunchApp(Application),
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
-    GithubScanFinished(Result<Vec<ColonySoftware>, anyhow::Error>),
-    ColonyAppsScanFinished(Result<Vec<Application>, anyhow::Error>),
-    ColonyLaunchFinished(Result<(), anyhow::Error>),
+    GithubScanFinished(Result<Vec<ColonySoftware>, String>),
+    ColonyAppsScanFinished(Result<Vec<Application>, String>),
+    ColonyLaunchFinished(Result<(), String>),
 }
 
 impl App {
@@ -187,11 +195,19 @@ impl App {
                 self.github_status = "Scan GitHub en cours...".to_string();
                 Task::batch([
                     Task::perform(
-                        github::scan_mothersphere_colony_software(),
+                        async {
+                            github::scan_mothersphere_colony_software()
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
                         Message::GithubScanFinished,
                     ),
                     Task::perform(
-                        colony_apps::scan_colony_applications(),
+                        async {
+                            colony_apps::scan_colony_applications()
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
                         Message::ColonyAppsScanFinished,
                     ),
                 ])
@@ -200,7 +216,11 @@ impl App {
                 if app.origin == AppOrigin::Colony {
                     self.status_message = format!("Mise à jour en cours pour {}...", app.name);
                     return Task::perform(
-                        colony_apps::update_and_launch(app),
+                        async move {
+                            colony_apps::update_and_launch(app)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
                         Message::ColonyLaunchFinished,
                     );
                 }
@@ -510,7 +530,7 @@ impl App {
             .font(self.app_font())
             .color(color!(0x888899));
 
-        let list = if self.colony_software.is_empty() {
+        let list: Element<'_, Message> = if self.colony_software.is_empty() {
             text("Aucun repo Colony détecté pour le moment.")
                 .size(12)
                 .font(self.app_font())
