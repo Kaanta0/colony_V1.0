@@ -15,6 +15,8 @@ pub struct Application {
     pub category: AppCategory,
     pub origin: AppOrigin,
     pub update: Option<UpdateProposal>,
+    pub description: Option<String>,
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +396,8 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
         category,
         origin: AppOrigin::Windows,
         update: None,
+        description: None,
+        language: None,
     })
 }
 
@@ -409,6 +413,8 @@ fn parse_exe_file(path: &Path) -> Option<Application> {
         category: AppCategory::Other,
         origin: AppOrigin::Windows,
         update: None,
+        description: None,
+        language: None,
     })
 }
 
@@ -565,6 +571,8 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         category: categorize_linux_app(&categories),
         origin,
         update: None,
+        description: None,
+        language: None,
     })
 }
 
