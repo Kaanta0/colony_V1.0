@@ -1,14 +1,14 @@
 [
-  { "name": "All", "icon": "\uf00a", "origin": "non_windows", "category": "all" },
+  { "name": "All", "icon": "\uf00a", "origin": "colony", "category": "all" },
   { "name": "Windows", "icon": "\uf17a", "origin": "windows", "category": "all" },
-  { "name": "Linux", "icon": "\uf17c", "origin": "linux", "category": "all" },
-  { "name": "Development", "icon": "\uf121", "origin": "non_windows", "category": "development" },
-  { "name": "Graphics", "icon": "\uf1fc", "origin": "non_windows", "category": "graphics" },
-  { "name": "Network", "icon": "\uf0ac", "origin": "non_windows", "category": "network" },
-  { "name": "Office", "icon": "\uf0f6", "origin": "non_windows", "category": "office" },
-  { "name": "Multimedia", "icon": "\uf008", "origin": "non_windows", "category": "multimedia" },
-  { "name": "System", "icon": "\uf085", "origin": "non_windows", "category": "system" },
-  { "name": "Utilities", "icon": "\uf0ad", "origin": "non_windows", "category": "utility" },
-  { "name": "Games", "icon": "\uf11b", "origin": "non_windows", "category": "game" },
-  { "name": "Other", "icon": "\uf128", "origin": "non_windows", "category": "other" }
+  { "name": "External", "icon": "\uf17c", "origin": "external", "category": "all" },
+  { "name": "Development", "icon": "\uf121", "origin": "colony", "category": "development" },
+  { "name": "Graphics", "icon": "\uf1fc", "origin": "colony", "category": "graphics" },
+  { "name": "Network", "icon": "\uf0ac", "origin": "colony", "category": "network" },
+  { "name": "Office", "icon": "\uf0f6", "origin": "colony", "category": "office" },
+  { "name": "Multimedia", "icon": "\uf008", "origin": "colony", "category": "multimedia" },
+  { "name": "System", "icon": "\uf085", "origin": "colony", "category": "system" },
+  { "name": "Utilities", "icon": "\uf0ad", "origin": "colony", "category": "utility" },
+  { "name": "Games", "icon": "\uf11b", "origin": "colony", "category": "game" },
+  { "name": "Other", "icon": "\uf128", "origin": "colony", "category": "other" }
 ]

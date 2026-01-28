@@ -61,14 +61,14 @@ décrit le nom, l’icône et le filtre à appliquer :
 
 ```json
 [
-  { "name": "All", "icon": "\uf00a", "origin": "non_windows", "category": "all" },
+  { "name": "All", "icon": "\uf00a", "origin": "colony", "category": "all" },
   { "name": "Windows", "icon": "\uf17a", "origin": "windows", "category": "all" }
 ]
 ```
 
 - `name` : libellé affiché.
 - `icon` : caractère unicode (icônes Nerd Font).
-- `origin` : filtre d’origine (`any`, `windows`, `non_windows`).
+- `origin` : filtre d’origine (`any`, `windows`, `colony`, `external`).
 - `category` : filtre de catégorie (`development`, `graphics`, `network`, `office`, `multimedia`,
   `system`, `utility`, `game`, `other`, ou `all`).
 
@@ -94,14 +94,30 @@ unix = [
   "${HOME}/.local/share/flatpak/exports/share/applications",
   "/var/lib/snapd/desktop/applications",
 ]
+
+colony = [
+  "${HOME}/.local/share/colony/applications",
+]
 ```
 
 - `windows` : liste explicite des dossiers à scanner sous Windows.
 - `unix` : liste explicite des dossiers à scanner sous Linux/macOS.
+- `colony` : dossiers dédiés aux applications Colony (sous Linux/macOS).
 - Les variables d’environnement `${...}` (et `%...%` côté Windows) sont résolues à l’exécution.
 
 Si le fichier est absent ou invalide, Colony utilise les valeurs historiques (Start Menu Windows,
 `$HOME/.local/share/applications`, `$XDG_DATA_DIRS` ou `/usr/share/applications`, etc.).
+
+### Règle d'origine des applications Linux
+
+Sous Linux, Colony classe les applications selon leur dossier d'origine :
+
+- Toute application `.desktop` située dans un dossier listé dans `scan.colony` est marquée
+  `origin = "colony"`.
+- Toute application `.desktop` détectée dans les autres dossiers de `scan.unix` est marquée
+  `origin = "external"` (applications Linux externes).
+
+Cette règle permet de séparer clairement les applications Colony des applications Linux classiques.
 
 Les instructions de build/exécution seront ajoutées une fois la base Rust en place.
 

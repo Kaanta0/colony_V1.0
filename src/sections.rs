@@ -24,6 +24,8 @@ enum OriginFilter {
     WindowsOnly,
     NonWindows,
     LinuxOnly,
+    ColonyOnly,
+    ExternalOnly,
 }
 
 impl SectionFilter {
@@ -42,6 +44,16 @@ impl SectionFilter {
             }
             OriginFilter::LinuxOnly => {
                 if app.origin != AppOrigin::Linux {
+                    return false;
+                }
+            }
+            OriginFilter::ColonyOnly => {
+                if app.origin != AppOrigin::Colony {
+                    return false;
+                }
+            }
+            OriginFilter::ExternalOnly => {
+                if app.origin != AppOrigin::External && app.origin != AppOrigin::Linux {
                     return false;
                 }
             }
@@ -106,10 +118,12 @@ pub fn load_sections() -> Vec<Section> {
 fn parse_origin(origin: Option<&str>) -> OriginFilter {
     match origin.map(|value| value.trim().to_lowercase()) {
         Some(value) if value == "windows" || value == "windows_only" => OriginFilter::WindowsOnly,
-        Some(value) if value == "non_windows" || value == "nonwindows" || value == "colony" => {
+        Some(value) if value == "non_windows" || value == "nonwindows" => {
             OriginFilter::NonWindows
         }
-        Some(value) if value == "linux" || value == "linux_only" => OriginFilter::LinuxOnly,
+        Some(value) if value == "linux" || value == "linux_only" => OriginFilter::ExternalOnly,
+        Some(value) if value == "colony" => OriginFilter::ColonyOnly,
+        Some(value) if value == "external" => OriginFilter::ExternalOnly,
         Some(value) if value == "any" || value == "all" => OriginFilter::Any,
         Some(value) => {
             eprintln!("[sections] Unknown origin filter '{value}', defaulting to 'any'.");
@@ -147,7 +161,7 @@ fn default_sections() -> Vec<Section> {
             name: "All".to_string(),
             icon: "\u{f00a}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: None,
             },
         },
@@ -160,10 +174,10 @@ fn default_sections() -> Vec<Section> {
             },
         },
         Section {
-            name: "Linux".to_string(),
+            name: "External".to_string(),
             icon: "\u{f17c}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::LinuxOnly,
+                origin: OriginFilter::ExternalOnly,
                 category: None,
             },
         },
@@ -171,7 +185,7 @@ fn default_sections() -> Vec<Section> {
             name: "Development".to_string(),
             icon: "\u{f121}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Development),
             },
         },
@@ -179,7 +193,7 @@ fn default_sections() -> Vec<Section> {
             name: "Graphics".to_string(),
             icon: "\u{f1fc}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Graphics),
             },
         },
@@ -187,7 +201,7 @@ fn default_sections() -> Vec<Section> {
             name: "Network".to_string(),
             icon: "\u{f0ac}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Network),
             },
         },
@@ -195,7 +209,7 @@ fn default_sections() -> Vec<Section> {
             name: "Office".to_string(),
             icon: "\u{f0f6}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Office),
             },
         },
@@ -203,7 +217,7 @@ fn default_sections() -> Vec<Section> {
             name: "Multimedia".to_string(),
             icon: "\u{f008}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Multimedia),
             },
         },
@@ -211,7 +225,7 @@ fn default_sections() -> Vec<Section> {
             name: "System".to_string(),
             icon: "\u{f085}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::System),
             },
         },
@@ -219,7 +233,7 @@ fn default_sections() -> Vec<Section> {
             name: "Utilities".to_string(),
             icon: "\u{f0ad}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Utility),
             },
         },
@@ -227,7 +241,7 @@ fn default_sections() -> Vec<Section> {
             name: "Games".to_string(),
             icon: "\u{f11b}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Game),
             },
         },
@@ -235,7 +249,7 @@ fn default_sections() -> Vec<Section> {
             name: "Other".to_string(),
             icon: "\u{f128}".to_string(),
             filter: SectionFilter {
-                origin: OriginFilter::NonWindows,
+                origin: OriginFilter::ColonyOnly,
                 category: Some(AppCategory::Other),
             },
         },
