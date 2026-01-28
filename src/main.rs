@@ -115,11 +115,13 @@ impl App {
                 #[cfg(not(windows))]
                 {
                     // On Linux/macOS, parse and execute
-                    let parts: Vec<&str> = exec.split_whitespace().collect();
-                    if let Some((cmd, args)) = parts.split_first() {
-                        let _ = std::process::Command::new(cmd)
-                            .args(args)
-                            .spawn();
+                    if let Ok(mut parts) = shell_words::split(&exec) {
+                        parts.retain(|part| !part.is_empty());
+                        if let Some((cmd, args)) = parts.split_first() {
+                            let _ = std::process::Command::new(cmd)
+                                .args(args)
+                                .spawn();
+                        }
                     }
                 }
             }
