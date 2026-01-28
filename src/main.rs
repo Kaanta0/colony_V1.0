@@ -225,7 +225,7 @@ impl App {
             .map(|cat| self.view_category_button(cat))
             .collect();
 
-        let category_list = Column::with_children(category_buttons).spacing(8);
+        let category_list = Column::with_children(category_buttons).spacing(4);
 
         let rescan_btn = button(text("Rescan").size(13).font(app_font()))
             .on_press(Message::Rescan)
