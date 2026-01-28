@@ -42,3 +42,21 @@ Dépôt : `https://github.com/MotherSphere/orCAL`
 - Limiter la taille de la description (README) affichée dans Colony.
 - Prévoir des **fallbacks** si README ou langage indisponibles.
 
+## Authentification OAuth GitHub
+Colony propose un bouton **“Se connecter”** qui ouvre l’URL d’autorisation GitHub associée à l’OAuth App. L’utilisateur est redirigé vers GitHub pour accorder les permissions, puis Colony récupère un code d’autorisation.
+
+### Flow recommandé
+- Utiliser le **Authorization Code + PKCE** (adapté aux applications desktop) afin d’éviter d’exposer un client secret côté client.
+- Scopes minimaux :
+  - lecture des dépôts publics (aucun scope requis pour `public_repo`, mais prévoir l’auth pour augmenter les quotas),
+  - `read:user` uniquement si l’identité de l’utilisateur est nécessaire.
+
+### Gestion du token
+- Stocker le token localement de manière sécurisée (ex. coffre-fort OS / keychain).
+- Prévoir la **révocation** (suppression locale + invalidation côté GitHub si disponible).
+- Gérer l’**expiration** (renouvellement via le flow OAuth) et les erreurs de token expiré.
+- Appels GitHub authentifiés via : `Authorization: Bearer <token>`.
+
+### Mode non connecté
+- En absence de connexion, Colony bascule sur l’API publique GitHub.
+- Appliquer les limites de taux publiques et afficher un message clair lorsque le quota est atteint.
