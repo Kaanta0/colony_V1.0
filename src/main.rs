@@ -89,11 +89,20 @@ impl FontAssets {
 
 struct App {
     applications: Vec<Application>,
+    dummy_apps: Vec<DummyApp>,
     search_query: String,
     sections: Vec<Section>,
     selected_section: usize,
     status_message: String,
+    active_dummy_app: Option<usize>,
     font: Font,
+}
+
+#[derive(Clone)]
+struct DummyApp {
+    name: String,
+    description: String,
+    language: String,
 }
 
 impl App {
@@ -106,15 +115,18 @@ impl App {
         let status_message = format!("{} applications found", applications.len());
 
         let sections = sections::load_sections();
+        let dummy_apps = Self::dummy_development_apps();
 
         let font = font_assets.default_font();
 
         let app = Self {
             applications,
+            dummy_apps,
             search_query: String::new(),
             sections,
             selected_section: 0,
             status_message,
+            active_dummy_app: None,
             font,
         };
 
@@ -128,6 +140,8 @@ enum Message {
     SectionSelected(usize),
     Rescan,
     LaunchApp(String),
+    DummyAppSelected(usize),
+    DummyAppBack,
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
 }
@@ -146,6 +160,7 @@ impl App {
             Message::SectionSelected(index) => {
                 if index < self.sections.len() {
                     self.selected_section = index;
+                    self.active_dummy_app = None;
                 }
                 Task::none()
             }
@@ -210,6 +225,16 @@ impl App {
                         self.status_message = message;
                     }
                 }
+                Task::none()
+            }
+            Message::DummyAppSelected(index) => {
+                if index < self.dummy_apps.len() {
+                    self.active_dummy_app = Some(index);
+                }
+                Task::none()
+            }
+            Message::DummyAppBack => {
+                self.active_dummy_app = None;
                 Task::none()
             }
             Message::ClearStatus => {
@@ -342,6 +367,12 @@ impl App {
     }
 
     fn view_content(&self) -> Element<'_, Message> {
+        if let Some(index) = self.active_dummy_app {
+            if let Some(app) = self.dummy_apps.get(index) {
+                return self.view_dummy_detail(app);
+            }
+        }
+
         let search = text_input("Search applications...", &self.search_query)
             .on_input(Message::SearchChanged)
             .padding(12)
@@ -379,6 +410,10 @@ impl App {
     }
 
     fn view_app_grid(&self) -> Element<'_, Message> {
+        if self.is_development_section() {
+            return self.view_dummy_grid();
+        }
+
         let filtered: Vec<&Application> = self.filtered_applications();
 
         if filtered.is_empty() {
@@ -465,6 +500,146 @@ impl App {
             .into()
     }
 
+    fn view_dummy_grid(&self) -> Element<'_, Message> {
+        let filtered = self.filtered_dummy_apps();
+
+        if filtered.is_empty() {
+            return container(
+                text("No applications found")
+                    .size(16)
+                    .color(color!(0x666677)),
+            )
+            .width(Fill)
+            .height(Fill)
+            .center_x(Fill)
+            .center_y(Fill)
+            .into();
+        }
+
+        let mut rows: Vec<Element<'_, Message>> = Vec::new();
+
+        for chunk in filtered.chunks(4) {
+            let mut row_items: Vec<Element<'_, Message>> = Vec::new();
+
+            for (index, app) in chunk.iter() {
+                row_items.push(self.view_dummy_card(*index, *app));
+            }
+
+            while row_items.len() < 4 {
+                row_items.push(container(column![]).width(Fill).into());
+            }
+
+            rows.push(Row::with_children(row_items).spacing(12).into());
+        }
+
+        let grid = Column::with_children(rows).spacing(12);
+
+        scrollable(grid).height(Fill).into()
+    }
+
+    fn view_dummy_card(&self, index: usize, app: &DummyApp) -> Element<'_, Message> {
+        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
+
+        let icon = text(icon_char.to_string())
+            .size(32)
+            .font(self.app_font_with_weight(Weight::Medium))
+            .color(color!(0x8888ff));
+
+        let name = text(app.name.clone())
+            .size(14)
+            .font(self.app_font())
+            .color(color!(0xffffff));
+
+        let card_content = column![
+            container(icon)
+                .width(Fill)
+                .center_x(Fill),
+            container(text("")).height(8),
+            container(name)
+                .width(Fill)
+                .height(32)
+                .center_x(Fill)
+                .center_y(Fill),
+        ]
+        .spacing(4)
+        .padding(16)
+        .width(Fill);
+
+        button(card_content)
+            .on_press(Message::DummyAppSelected(index))
+            .padding(0)
+            .width(Fill)
+            .height(120)
+            .style(|_theme, status| {
+                let bg = match status {
+                    button::Status::Hovered => color!(0x2a2a4e),
+                    button::Status::Pressed => color!(0x3a3a5e),
+                    _ => color!(0x1a1a2e),
+                };
+                button::Style {
+                    background: Some(bg.into()),
+                    text_color: color!(0xffffff),
+                    border: iced::Border::default().rounded(12),
+                    ..Default::default()
+                }
+            })
+            .into()
+    }
+
+    fn view_dummy_detail(&self, app: &DummyApp) -> Element<'_, Message> {
+        let back_button = button(text("Retour").size(13).font(self.app_font()))
+            .on_press(Message::DummyAppBack)
+            .padding([8, 16]);
+
+        let title = text(&app.name)
+            .size(24)
+            .font(self.app_font_with_weight(Weight::Bold))
+            .color(color!(0xffffff));
+
+        let description = text(&app.description)
+            .size(16)
+            .font(self.app_font())
+            .color(color!(0xcfcfe6));
+
+        let language = text(format!("Langage: {}", app.language))
+            .size(12)
+            .font(self.app_font())
+            .color(color!(0x8a8aa3));
+
+        let header = row![back_button]
+            .width(Fill)
+            .align_y(iced::Alignment::Center);
+
+        let body = container(description)
+            .width(Fill)
+            .height(Fill)
+            .center_x(Fill)
+            .center_y(Fill);
+
+        let footer = row![container(text("")).width(Fill), language]
+            .align_y(iced::Alignment::End);
+
+        let detail = column![
+            header,
+            container(title).width(Fill).center_x(Fill),
+            body,
+            footer
+        ]
+        .spacing(16)
+        .padding(24)
+        .width(Fill)
+        .height(Fill);
+
+        container(detail)
+            .style(|_theme| container::Style {
+                background: Some(color!(0x0f0f1a).into()),
+                ..Default::default()
+            })
+            .width(Fill)
+            .height(Fill)
+            .into()
+    }
+
     fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
         let selected_section = self.sections.get(self.selected_section);
@@ -483,6 +658,66 @@ impl App {
                 app.name.to_lowercase().contains(&query)
             })
             .collect()
+    }
+
+    fn filtered_dummy_apps(&self) -> Vec<(usize, &DummyApp)> {
+        let query = self.search_query.to_lowercase();
+        self.dummy_apps
+            .iter()
+            .enumerate()
+            .filter(|(_, app)| {
+                if query.is_empty() {
+                    true
+                } else {
+                    app.name.to_lowercase().contains(&query)
+                }
+            })
+            .collect()
+    }
+
+    fn is_development_section(&self) -> bool {
+        self.sections
+            .get(self.selected_section)
+            .and_then(|section| section.category())
+            .map(|category| category == &scan::AppCategory::Development)
+            .unwrap_or(false)
+    }
+
+    fn dummy_development_apps() -> Vec<DummyApp> {
+        vec![
+            DummyApp {
+                name: "Swift Toolkit".to_string(),
+                description: "Boîte à outils moderne pour prototyper des apps Swift et explorer les API Apple."
+                    .to_string(),
+                language: "Swift".to_string(),
+            },
+            DummyApp {
+                name: "Kotlin Studio".to_string(),
+                description: "Espace de travail rapide pour composer, tester et profiler du code Kotlin."
+                    .to_string(),
+                language: "Kotlin".to_string(),
+            },
+            DummyApp {
+                name: "Dart Lab".to_string(),
+                description: "Laboratoire expérimental pour itérer sur des widgets et des scripts Dart."
+                    .to_string(),
+                language: "Dart".to_string(),
+            },
+            DummyApp {
+                name: "TypeScript Playground".to_string(),
+                description:
+                    "Environnement interactif pour explorer les types, les utilitaires et les bibliothèques TS."
+                        .to_string(),
+                language: "TypeScript".to_string(),
+            },
+            DummyApp {
+                name: "Flutter Dev Tools".to_string(),
+                description:
+                    "Console de performance pour déboguer des interfaces Flutter et leurs animations."
+                        .to_string(),
+                language: "Dart / Flutter".to_string(),
+            },
+        ]
     }
 
     fn app_font(&self) -> Font {
