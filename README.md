@@ -46,6 +46,14 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 cargo run
 ```
 
+## Assets UI (polices)
+
+Les polices Nerd Font utilisées par l’interface se trouvent dans
+`src/ui/assets/fonts/JetBrainsMonoNerdFont/` (notamment les variantes
+`Regular`, `Medium` et `Bold`). L’application tente de charger ces fichiers au
+démarrage. Si les assets sont absents ou illisibles, Colony bascule sur une
+police système monospace en fallback.
+
 ### Configuration des sections
 
 Les sections affichées dans la sidebar sont définies dans `config/categories.json`. Chaque entrée
