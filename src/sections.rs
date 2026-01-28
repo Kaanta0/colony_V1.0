@@ -174,7 +174,7 @@ fn default_sections() -> Vec<Section> {
             },
         },
         Section {
-            name: "External".to_string(),
+            name: "Linux".to_string(),
             icon: "\u{f17c}".to_string(),
             filter: SectionFilter {
                 origin: OriginFilter::ExternalOnly,
