@@ -468,7 +468,7 @@ impl App {
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
+    fn view_app_card<'a>(&self, app: &'a Application) -> Element<'a, Message> {
         let icon_char = app
             .name
             .chars()
@@ -504,6 +504,18 @@ impl App {
                 None
             }
         });
+        let description = app.description.as_ref().map(|description| {
+            text(description)
+                .size(11)
+                .font(self.app_font())
+                .color(color!(0x9a9ab5))
+        });
+        let language = app.language.as_ref().map(|language| {
+            text(format!("Langage: {}", language))
+                .size(10)
+                .font(self.app_font())
+                .color(color!(0x7a7a99))
+        });
 
         let mut content_children: Vec<Element<'_, Message>> = Vec::new();
         content_children.push(container(icon).width(Fill).center_x(Fill).into());
@@ -516,6 +528,12 @@ impl App {
                 .center_y(Fill)
                 .into(),
         );
+        if let Some(description) = description {
+            content_children.push(container(description).width(Fill).center_x(Fill).into());
+        }
+        if let Some(language) = language {
+            content_children.push(container(language).width(Fill).center_x(Fill).into());
+        }
         if let Some(label) = update_label {
             content_children.push(container(label).width(Fill).center_x(Fill).into());
         }
