@@ -824,9 +824,7 @@ impl App {
 fn github_scan_task() -> Task<Message> {
     Task::perform(
         async {
-            github::scan_github_apps()
-                .await
-                .map_err(|error| error.to_string())
+            github::scan_github_apps_with_runtime().map_err(|error| error.to_string())
         },
         Message::GithubScanFinished,
     )

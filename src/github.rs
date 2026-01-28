@@ -80,6 +80,14 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
     Ok(apps)
 }
 
+pub fn scan_github_apps_with_runtime() -> Result<Vec<Application>> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("creating GitHub scan runtime")?;
+    runtime.block_on(scan_github_apps())
+}
+
 fn load_github_user() -> String {
     let path = Path::new("config/colony.toml");
     let contents = match fs::read_to_string(path) {
