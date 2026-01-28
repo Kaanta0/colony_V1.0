@@ -1,3 +1,4 @@
+mod github;
 mod scan;
 mod sections;
 
@@ -9,6 +10,7 @@ use iced::{color, Element, Fill, Font, Length, Task, Theme};
 use std::path::Path;
 use std::time::Duration;
 
+use github::ColonySoftware;
 use scan::Application;
 use sections::Section;
 
@@ -93,6 +95,8 @@ struct App {
     sections: Vec<Section>,
     selected_section: usize,
     status_message: String,
+    colony_software: Vec<ColonySoftware>,
+    github_status: String,
     font: Font,
 }
 
@@ -115,10 +119,21 @@ impl App {
             sections,
             selected_section: 0,
             status_message,
+            colony_software: Vec::new(),
+            github_status: "Scan GitHub en cours...".to_string(),
             font,
         };
 
-        (app, font_assets.load_task())
+        (
+            app,
+            Task::batch([
+                font_assets.load_task(),
+                Task::perform(
+                    github::scan_mothersphere_colony_software(),
+                    Message::GithubScanFinished,
+                ),
+            ]),
+        )
     }
 }
 
@@ -130,6 +145,7 @@ enum Message {
     LaunchApp(String),
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
+    GithubScanFinished(Result<Vec<ColonySoftware>, anyhow::Error>),
 }
 
 impl App {
@@ -159,7 +175,11 @@ impl App {
                         self.status_message = format!("Error: {e}");
                     }
                 }
-                Task::none()
+                self.github_status = "Scan GitHub en cours...".to_string();
+                Task::perform(
+                    github::scan_mothersphere_colony_software(),
+                    Message::GithubScanFinished,
+                )
             }
             Message::LaunchApp(exec) => {
                 let launch_result = {
@@ -217,6 +237,21 @@ impl App {
                 Task::none()
             }
             Message::FontLoaded(_) => Task::none(),
+            Message::GithubScanFinished(result) => {
+                match result {
+                    Ok(items) => {
+                        self.github_status = format!(
+                            "{} logiciel(s) Colony détecté(s) sur GitHub",
+                            items.len()
+                        );
+                        self.colony_software = items;
+                    }
+                    Err(error) => {
+                        self.github_status = format!("Erreur GitHub: {error}");
+                    }
+                }
+                Task::none()
+            }
         }
     }
 
@@ -358,9 +393,11 @@ impl App {
             .align_y(iced::Alignment::Center);
 
         let app_grid = self.view_app_grid();
+        let github_section = self.view_github_section();
 
         let content = column![
             header,
+            github_section,
             container(text("")).height(16),
             app_grid
         ]
@@ -413,6 +450,54 @@ impl App {
         let grid = Column::with_children(rows).spacing(12);
 
         scrollable(grid).height(Fill).into()
+    }
+
+    fn view_github_section(&self) -> Element<'_, Message> {
+        let heading = text("GitHub MotherSphere")
+            .size(13)
+            .font(self.app_font())
+            .color(color!(0x8a8aa3));
+
+        let status = text(&self.github_status)
+            .size(12)
+            .font(self.app_font())
+            .color(color!(0x888899));
+
+        let list = if self.colony_software.is_empty() {
+            text("Aucun repo Colony détecté pour le moment.")
+                .size(12)
+                .font(self.app_font())
+                .color(color!(0x666677))
+                .into()
+        } else {
+            let entries: Vec<Element<'_, Message>> = self
+                .colony_software
+                .iter()
+                .map(|software| {
+                    let name = text(&software.name)
+                        .size(13)
+                        .font(self.app_font())
+                        .color(color!(0xffffff));
+                    let description = text(
+                        software
+                            .description
+                            .as_deref()
+                            .unwrap_or("Aucune description."),
+                    )
+                    .size(11)
+                    .font(self.app_font())
+                    .color(color!(0x888899));
+
+                    column![name, description].spacing(2).into()
+                })
+                .collect();
+
+            Column::with_children(entries)
+                .spacing(6)
+                .into()
+        };
+
+        column![heading, status, list].spacing(6).into()
     }
 
     fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
