@@ -1,20 +1,13 @@
 mod scan;
 mod sections;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use iced::font::{self, Weight};
 use iced::widget::{
     button, column, container, row, scrollable, text, text_input, Column, Row,
 };
 use iced::{color, Element, Fill, Font, Length, Task, Theme};
-use rand::distr::Alphanumeric;
-use rand::Rng;
-use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
-use tiny_http::Response;
-use url::Url;
 
 use scan::Application;
 use sections::Section;
@@ -41,7 +34,6 @@ const APP_FONT_FILES: [&str; 3] = [
     "JetBrainsMonoNerdFont-Medium.ttf",
     "JetBrainsMonoNerdFont-Bold.ttf",
 ];
-const OAUTH_PORT: u16 = 8787;
 
 #[derive(Clone)]
 struct FontAssets {
@@ -104,7 +96,6 @@ struct App {
     status_message: String,
     active_dummy_app: Option<usize>,
     font: Font,
-    auth: AuthState,
 }
 
 #[derive(Clone)]
@@ -112,108 +103,6 @@ struct DummyApp {
     name: String,
     description: String,
     language: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum AuthStatus {
-    Connected,
-    Disconnected,
-    Connecting,
-}
-
-#[derive(Clone, Debug)]
-struct AuthState {
-    status: AuthStatus,
-    message: String,
-    token: Option<String>,
-    expected_state: Option<String>,
-    code_verifier: Option<String>,
-}
-
-impl AuthState {
-    fn load() -> Self {
-        match load_token() {
-            Ok(Some(token)) => Self {
-                status: AuthStatus::Connected,
-                message: "Connecté à GitHub.".to_string(),
-                token: Some(token),
-                expected_state: None,
-                code_verifier: None,
-            },
-            Ok(None) => Self {
-                status: AuthStatus::Disconnected,
-                message: "Non connecté.".to_string(),
-                token: None,
-                expected_state: None,
-                code_verifier: None,
-            },
-            Err(message) => Self {
-                status: AuthStatus::Disconnected,
-                message: format!("Non connecté ({message})."),
-                token: None,
-                expected_state: None,
-                code_verifier: None,
-            },
-        }
-    }
-
-    fn status_color(&self) -> iced::Color {
-        match self.status {
-            AuthStatus::Connected => color!(0x6bd68f),
-            AuthStatus::Connecting => color!(0xf0c674),
-            AuthStatus::Disconnected => color!(0x8a8aa3),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct OAuthConfig {
-    client_id: String,
-    client_secret: Option<String>,
-}
-
-impl OAuthConfig {
-    fn from_env() -> Result<Self, String> {
-        let client_id = std::env::var("GITHUB_CLIENT_ID")
-            .map_err(|_| "Définissez GITHUB_CLIENT_ID pour OAuth GitHub.".to_string())?;
-        let client_secret = std::env::var("GITHUB_CLIENT_SECRET").ok();
-        Ok(Self {
-            client_id,
-            client_secret,
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-struct OAuthRequest {
-    auth_url: String,
-    state: String,
-    code_verifier: String,
-    redirect_uri: String,
-}
-
-impl OAuthRequest {
-    fn new(config: &OAuthConfig) -> Result<Self, String> {
-        let code_verifier = generate_code_verifier();
-        let code_challenge = generate_code_challenge(&code_verifier)?;
-        let state = generate_state();
-        let redirect_uri = format!("http://127.0.0.1:{OAUTH_PORT}/oauth/callback");
-
-        let auth_url = format!(
-            "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}&scope=read:user&state={state}&code_challenge={code_challenge}&code_challenge_method=S256",
-            client_id = config.client_id,
-            redirect_uri = urlencoding::encode(&redirect_uri),
-            state = state,
-            code_challenge = code_challenge
-        );
-
-        Ok(Self {
-            auth_url,
-            state,
-            code_verifier,
-            redirect_uri,
-        })
-    }
 }
 
 impl App {
@@ -229,7 +118,6 @@ impl App {
         let dummy_apps = Self::dummy_development_apps();
 
         let font = font_assets.default_font();
-        let auth = AuthState::load();
 
         let app = Self {
             applications,
@@ -240,7 +128,6 @@ impl App {
             status_message,
             active_dummy_app: None,
             font,
-            auth,
         };
 
         (app, font_assets.load_task())
@@ -257,9 +144,6 @@ enum Message {
     DummyAppBack,
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
-    LoginRequested,
-    LoginUrlOpened(Result<(), String>),
-    OAuthFinished(Result<String, String>),
 }
 
 impl App {
@@ -358,83 +242,6 @@ impl App {
                 Task::none()
             }
             Message::FontLoaded(_) => Task::none(),
-            Message::LoginRequested => {
-                if self.auth.status == AuthStatus::Connecting {
-                    return Task::none();
-                }
-
-                let config = match OAuthConfig::from_env() {
-                    Ok(config) => config,
-                    Err(message) => {
-                        self.auth.status = AuthStatus::Disconnected;
-                        self.auth.message = message;
-                        return Task::none();
-                    }
-                };
-
-                let oauth_request = match OAuthRequest::new(&config) {
-                    Ok(request) => request,
-                    Err(message) => {
-                        self.auth.status = AuthStatus::Disconnected;
-                        self.auth.message = message;
-                        return Task::none();
-                    }
-                };
-
-                self.auth.status = AuthStatus::Connecting;
-                self.auth.message =
-                    "Ouverture du navigateur pour se connecter à GitHub...".to_string();
-                self.auth.expected_state = Some(oauth_request.state.clone());
-                self.auth.code_verifier = Some(oauth_request.code_verifier.clone());
-
-                let open_url = oauth_request.auth_url.clone();
-                let redirect_uri = oauth_request.redirect_uri.clone();
-                let state = oauth_request.state.clone();
-                let code_verifier = oauth_request.code_verifier.clone();
-
-                Task::batch([
-                    Task::perform(
-                        async move { open_browser(&open_url) },
-                        Message::LoginUrlOpened,
-                    ),
-                    Task::perform(
-                        async move {
-                            oauth_flow(state, code_verifier, redirect_uri, config)
-                        },
-                        Message::OAuthFinished,
-                    ),
-                ])
-            }
-            Message::LoginUrlOpened(result) => {
-                if let Err(message) = result {
-                    self.auth.status = AuthStatus::Disconnected;
-                    self.auth.message = message;
-                    self.auth.expected_state = None;
-                    self.auth.code_verifier = None;
-                }
-                Task::none()
-            }
-            Message::OAuthFinished(result) => {
-                match result {
-                    Ok(token) => {
-                        self.auth.status = AuthStatus::Connected;
-                        self.auth.token = Some(token.clone());
-                        self.auth.message = "Connecté à GitHub.".to_string();
-                        if let Err(message) = save_token(&token) {
-                            self.auth.message = format!(
-                                "Connecté, mais impossible de sauvegarder le token: {message}"
-                            );
-                        }
-                    }
-                    Err(message) => {
-                        self.auth.status = AuthStatus::Disconnected;
-                        self.auth.message = message;
-                    }
-                }
-                self.auth.expected_state = None;
-                self.auth.code_verifier = None;
-                Task::none()
-            }
         }
     }
 
@@ -577,26 +384,7 @@ impl App {
             .font(self.app_font())
             .color(color!(0x888899));
 
-        let auth_feedback = text(&self.auth.message)
-            .size(12)
-            .font(self.app_font())
-            .color(self.auth.status_color());
-
-        let login_button = {
-            let button_base = button(text("Se connecter").size(13).font(self.app_font()))
-                .padding([8, 16]);
-            if self.auth.status == AuthStatus::Connected
-                || self.auth.status == AuthStatus::Connecting
-            {
-                button_base
-            } else {
-                button_base.on_press(Message::LoginRequested)
-            }
-        };
-
-        let auth_column = column![login_button, auth_feedback].spacing(4);
-
-        let header = row![search, status, auth_column]
+        let header = row![search, status]
             .spacing(16)
             .align_y(iced::Alignment::Center);
 
@@ -943,156 +731,4 @@ impl App {
     fn theme(&self) -> Theme {
         Theme::Dark
     }
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct OAuthTokenResponse {
-    access_token: String,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct StoredToken {
-    access_token: String,
-}
-
-fn open_browser(url: &str) -> Result<(), String> {
-    webbrowser::open(url).map(|_| ()).map_err(|error| error.to_string())
-}
-
-fn oauth_flow(
-    expected_state: String,
-    code_verifier: String,
-    redirect_uri: String,
-    config: OAuthConfig,
-) -> Result<String, String> {
-    let code = wait_for_oauth_callback(&expected_state)?;
-    exchange_code_for_token(&config, &code, &code_verifier, &redirect_uri)
-}
-
-fn wait_for_oauth_callback(expected_state: &str) -> Result<String, String> {
-    let server = tiny_http::Server::http(("127.0.0.1", OAUTH_PORT))
-        .map_err(|error| format!("Impossible de démarrer le serveur OAuth: {error}"))?;
-
-    let request = server
-        .recv()
-        .map_err(|error| format!("Erreur lors de la réception OAuth: {error}"))?;
-
-    let request_url = format!("http://localhost{}", request.url());
-    let parsed = Url::parse(&request_url)
-        .map_err(|error| format!("URL OAuth invalide: {error}"))?;
-
-    let mut code = None;
-    let mut state = None;
-    for (key, value) in parsed.query_pairs() {
-        match key.as_ref() {
-            "code" => code = Some(value.into_owned()),
-            "state" => state = Some(value.into_owned()),
-            _ => {}
-        }
-    }
-
-    let response = Response::from_string(
-        "<html><body>Connexion réussie. Vous pouvez fermer cette fenêtre.</body></html>",
-    );
-    let _ = request.respond(response);
-
-    let Some(code) = code else {
-        return Err("Le callback OAuth ne contient pas de code.".to_string());
-    };
-
-    if state.as_deref() != Some(expected_state) {
-        return Err("État OAuth invalide.".to_string());
-    }
-
-    Ok(code)
-}
-
-fn exchange_code_for_token(
-    config: &OAuthConfig,
-    code: &str,
-    code_verifier: &str,
-    redirect_uri: &str,
-) -> Result<String, String> {
-    let request = ureq::post("https://github.com/login/oauth/access_token")
-        .set("Accept", "application/json");
-
-    let mut form = vec![
-        ("client_id", config.client_id.as_str()),
-        ("code", code),
-        ("redirect_uri", redirect_uri),
-        ("code_verifier", code_verifier),
-    ];
-
-    if let Some(secret) = config.client_secret.as_deref() {
-        form.push(("client_secret", secret));
-    }
-
-    let response = request
-        .send_form(&form)
-        .map_err(|error| format!("Erreur OAuth: {error}"))?;
-
-    let token_response: OAuthTokenResponse = response
-        .into_json()
-        .map_err(|error| format!("Réponse OAuth invalide: {error}"))?;
-
-    Ok(token_response.access_token)
-}
-
-fn generate_code_verifier() -> String {
-    rand::rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect()
-}
-
-fn generate_code_challenge(code_verifier: &str) -> Result<String, String> {
-    let mut hasher = Sha256::new();
-    hasher.update(code_verifier.as_bytes());
-    let hash = hasher.finalize();
-    Ok(URL_SAFE_NO_PAD.encode(hash))
-}
-
-fn generate_state() -> String {
-    rand::rng()
-        .sample_iter(&Alphanumeric)
-        .take(32)
-        .map(char::from)
-        .collect()
-}
-
-fn token_storage_path() -> Result<PathBuf, String> {
-    let base_dir = dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .ok_or_else(|| "Impossible de trouver un dossier pour stocker le token.".to_string())?;
-    Ok(base_dir.join("colony").join("github_token.json"))
-}
-
-fn save_token(token: &str) -> Result<(), String> {
-    let path = token_storage_path()?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Impossible de créer le dossier token: {error}"))?;
-    }
-
-    let payload = StoredToken {
-        access_token: token.to_string(),
-    };
-    let data = serde_json::to_vec_pretty(&payload)
-        .map_err(|error| format!("Impossible de sérialiser le token: {error}"))?;
-    std::fs::write(&path, data)
-        .map_err(|error| format!("Impossible d'écrire le token: {error}"))?;
-    Ok(())
-}
-
-fn load_token() -> Result<Option<String>, String> {
-    let path = token_storage_path()?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let data = std::fs::read(&path)
-        .map_err(|error| format!("Impossible de lire le token: {error}"))?;
-    let payload: StoredToken = serde_json::from_slice(&data)
-        .map_err(|error| format!("Impossible de parser le token: {error}"))?;
-    Ok(Some(payload.access_token))
 }
