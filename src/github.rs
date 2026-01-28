@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::header::{ETAG, IF_NONE_MATCH};
@@ -12,6 +13,9 @@ use crate::metadata::load_local_metadata;
 use crate::scan::{AppCategory, AppOrigin, Application, UpdateProposal};
 
 const DEFAULT_GITHUB_USER: &str = "MotherSphere";
+const MAX_RATE_LIMIT_RETRIES: usize = 3;
+const RATE_LIMIT_BACKOFF_BASE_SECS: u64 = 2;
+const RATE_LIMIT_BACKOFF_MAX_SECS: u64 = 60;
 const PER_PAGE: usize = 100;
 const DESCRIPTION_LIMIT: usize = 200;
 
@@ -482,48 +486,85 @@ async fn get_cached_body(
     accept: Option<&str>,
     etag_cache: &mut GithubEtagCache,
 ) -> Result<CachedBody> {
-    let mut request = client.get(url);
-    if let Some(accept) = accept {
-        request = request.header("Accept", accept);
-    }
-    if let Some(entry) = etag_cache.get(url) {
-        request = request.header(IF_NONE_MATCH, entry.etag.clone());
-    }
-    let response = request.send().await.context("sending GitHub request")?;
-    let status = response.status();
-    if status == reqwest::StatusCode::NOT_MODIFIED {
-        if let Some(entry) = etag_cache.get(url) {
-            return Ok(CachedBody::Body(entry.body.clone()));
+    for attempt in 0..=MAX_RATE_LIMIT_RETRIES {
+        let mut request = client.get(url);
+        if let Some(accept) = accept {
+            request = request.header("Accept", accept);
         }
-        return Err(anyhow!("received 304 without a cached body for {}", url));
-    }
-    if status == reqwest::StatusCode::NOT_FOUND {
-        return Ok(CachedBody::NotFound);
-    }
-    let headers = response.headers().clone();
-    let etag = headers
-        .get(ETAG)
-        .and_then(|value| value.to_str().ok())
-        .map(|value| value.to_string());
-    let body = response
-        .text()
-        .await
-        .with_context(|| format!("reading response body for {}", url))?;
-    if !status.is_success() {
+        if let Some(entry) = etag_cache.get(url) {
+            request = request.header(IF_NONE_MATCH, entry.etag.clone());
+        }
+        let response = request.send().await.context("sending GitHub request")?;
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(entry) = etag_cache.get(url) {
+                return Ok(CachedBody::Body(entry.body.clone()));
+            }
+            return Err(anyhow!("received 304 without a cached body for {}", url));
+        }
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(CachedBody::NotFound);
+        }
+        let headers = response.headers().clone();
         let rate_limit_remaining = headers
             .get("X-RateLimit-Remaining")
             .and_then(|value| value.to_str().ok())
-            .unwrap_or("unknown");
+            .and_then(|value| value.parse::<u64>().ok());
         let rate_limit_reset = headers
             .get("X-RateLimit-Reset")
             .and_then(|value| value.to_str().ok())
-            .unwrap_or("unknown");
-        return Err(anyhow!(
-            "GitHub API error for {url}: status={status}, rate_limit_remaining={rate_limit_remaining}, rate_limit_reset={rate_limit_reset}, body={body}"
-        ));
+            .and_then(|value| value.parse::<u64>().ok());
+
+        if matches!(
+            status,
+            reqwest::StatusCode::FORBIDDEN | reqwest::StatusCode::TOO_MANY_REQUESTS
+        ) && rate_limit_remaining == Some(0)
+        {
+            if attempt < MAX_RATE_LIMIT_RETRIES {
+                let backoff =
+                    RATE_LIMIT_BACKOFF_BASE_SECS.saturating_mul(1_u64 << attempt);
+                let fallback_delay =
+                    Duration::from_secs(std::cmp::min(backoff, RATE_LIMIT_BACKOFF_MAX_SECS));
+                let delay = rate_limit_reset
+                    .and_then(|reset| {
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs();
+                        reset.checked_sub(now).map(Duration::from_secs)
+                    })
+                    .unwrap_or(fallback_delay);
+                if !delay.is_zero() {
+                    tokio::time::sleep(delay).await;
+                }
+                continue;
+            }
+        }
+
+        let etag = headers
+            .get(ETAG)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string());
+        let body = response
+            .text()
+            .await
+            .with_context(|| format!("reading response body for {}", url))?;
+        if !status.is_success() {
+            let rate_limit_remaining = rate_limit_remaining
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let rate_limit_reset = rate_limit_reset
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(anyhow!(
+                "GitHub API error for {url}: status={status}, rate_limit_remaining={rate_limit_remaining}, rate_limit_reset={rate_limit_reset}, body={body}"
+            ));
+        }
+        if let Some(etag) = etag {
+            etag_cache.update(url, etag, body.clone());
+        }
+        return Ok(CachedBody::Body(body));
     }
-    if let Some(etag) = etag {
-        etag_cache.update(url, etag, body.clone());
-    }
-    Ok(CachedBody::Body(body))
+
+    Err(anyhow!(
+        "GitHub API rate limit exceeded for {url} after {} retries",
+        MAX_RATE_LIMIT_RETRIES
+    ))
 }
