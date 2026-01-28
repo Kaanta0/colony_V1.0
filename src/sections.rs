@@ -23,8 +23,6 @@ enum OriginFilter {
     Any,
     WindowsOnly,
     NonWindows,
-    ColonyOnly,
-    ExternalOnly,
 }
 
 impl SectionFilter {
@@ -38,16 +36,6 @@ impl SectionFilter {
             }
             OriginFilter::NonWindows => {
                 if app.origin == AppOrigin::Windows {
-                    return false;
-                }
-            }
-            OriginFilter::ColonyOnly => {
-                if app.origin != AppOrigin::Colony {
-                    return false;
-                }
-            }
-            OriginFilter::ExternalOnly => {
-                if app.origin != AppOrigin::External {
                     return false;
                 }
             }
@@ -112,9 +100,9 @@ pub fn load_sections() -> Vec<Section> {
 fn parse_origin(origin: Option<&str>) -> OriginFilter {
     match origin.map(|value| value.trim().to_lowercase()) {
         Some(value) if value == "windows" || value == "windows_only" => OriginFilter::WindowsOnly,
-        Some(value) if value == "non_windows" || value == "nonwindows" => OriginFilter::NonWindows,
-        Some(value) if value == "colony" => OriginFilter::ColonyOnly,
-        Some(value) if value == "external" => OriginFilter::ExternalOnly,
+        Some(value) if value == "non_windows" || value == "nonwindows" || value == "colony" => {
+            OriginFilter::NonWindows
+        }
         Some(value) if value == "any" || value == "all" => OriginFilter::Any,
         Some(value) => {
             eprintln!("[sections] Unknown origin filter '{value}', defaulting to 'any'.");
