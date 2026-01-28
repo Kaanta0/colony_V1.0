@@ -192,15 +192,7 @@ impl App {
                             format!("{} applications found", self.applications.len());
                     }
                     Err(error) => {
-                        let error_lower = error.to_lowercase();
-                        if error_lower.contains("rate limit") {
-                            self.status_message = "Rate limit GitHub atteinte, réessayez plus tard (scan GitHub en attente).".to_string();
-                        } else if error_lower.contains("timeout") {
-                            self.status_message =
-                                "Timeout GitHub atteint, réessayez plus tard.".to_string();
-                        } else {
-                            self.status_message = format!("GitHub scan error: {error}");
-                        }
+                        self.status_message = format!("GitHub scan error: {error}");
                     }
                 }
                 Task::none()
