@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,9 @@ struct ColonyConfig {
 #[derive(Debug, Deserialize)]
 struct GithubConfig {
     user: Option<String>,
+    oauth_client_id: Option<String>,
+    oauth_client_secret: Option<String>,
+    oauth_redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,6 +38,7 @@ struct GithubRepo {
 
 pub async fn scan_github_apps() -> Result<Vec<Application>> {
     let user = load_github_user();
+    let _oauth_config = load_github_oauth_config();
     let mut etag_cache = GithubEtagCache::load();
     let repos = fetch_repos(&user, &mut etag_cache).await?;
     let local_metadata = load_local_metadata();
@@ -89,23 +94,73 @@ pub fn scan_github_apps_with_runtime() -> Result<Vec<Application>> {
 }
 
 fn load_github_user() -> String {
-    let path = Path::new("config/colony.toml");
-    let contents = match fs::read_to_string(path) {
-        Ok(contents) => contents,
-        Err(_) => return DEFAULT_GITHUB_USER.to_string(),
-    };
-    let config: ColonyConfig = match toml::from_str(&contents) {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("[github] Invalid config {}: {}", path.display(), error);
-            return DEFAULT_GITHUB_USER.to_string();
-        }
+    let config = match load_colony_config() {
+        Some(config) => config,
+        None => return DEFAULT_GITHUB_USER.to_string(),
     };
     config
         .github
         .and_then(|github| github.user)
-        .filter(|value| !value.trim().is_empty())
+        .and_then(non_empty_string)
         .unwrap_or_else(|| DEFAULT_GITHUB_USER.to_string())
+}
+
+#[derive(Debug, Clone)]
+struct GithubOauthConfigValues {
+    client_id: Option<String>,
+    client_secret: Option<String>,
+    redirect_uri: Option<String>,
+}
+
+fn load_github_oauth_config() -> GithubOauthConfigValues {
+    let config = load_colony_config();
+    let (client_id, client_secret, redirect_uri) = match config.and_then(|config| config.github) {
+        Some(github) => (
+            github.oauth_client_id.and_then(non_empty_string),
+            github.oauth_client_secret.and_then(non_empty_string),
+            github.oauth_redirect_uri.and_then(non_empty_string),
+        ),
+        None => (None, None, None),
+    };
+
+    let client_id = env::var("GITHUB_OAUTH_CLIENT_ID")
+        .ok()
+        .and_then(non_empty_string)
+        .or(client_id);
+    let client_secret = env::var("GITHUB_OAUTH_CLIENT_SECRET")
+        .ok()
+        .and_then(non_empty_string)
+        .or(client_secret);
+    let redirect_uri = env::var("GITHUB_OAUTH_REDIRECT_URI")
+        .ok()
+        .and_then(non_empty_string)
+        .or(redirect_uri);
+
+    GithubOauthConfigValues {
+        client_id,
+        client_secret,
+        redirect_uri,
+    }
+}
+
+fn load_colony_config() -> Option<ColonyConfig> {
+    let path = Path::new("config/colony.toml");
+    let contents = fs::read_to_string(path).ok()?;
+    match toml::from_str(&contents) {
+        Ok(config) => Some(config),
+        Err(error) => {
+            eprintln!("[github] Invalid config {}: {}", path.display(), error);
+            None
+        }
+    }
+}
+
+fn non_empty_string(value: String) -> Option<String> {
+    if value.trim().is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 async fn fetch_repos(user: &str, etag_cache: &mut GithubEtagCache) -> Result<Vec<GithubRepo>> {

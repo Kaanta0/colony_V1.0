@@ -22,3 +22,7 @@ colony = [
 
 [github]
 user = "MotherSphere"
+oauth_client_id = ""
+# Préférez la variable d'environnement GITHUB_OAUTH_CLIENT_SECRET.
+oauth_client_secret = ""
+oauth_redirect_uri = ""
