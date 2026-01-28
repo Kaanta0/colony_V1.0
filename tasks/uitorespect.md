@@ -1,4 +1,4 @@
-To future UI design
+To future UI design (implementation via Iced)
 
 |--------------------------------------------------------------|
 | 🔍 Search          — Apps — Quick Actions —      12:42 UTC   |

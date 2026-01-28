@@ -14,6 +14,7 @@ Ce dossier sert à suivre les tâches, décisions et actions futures liées au p
 - Approche **asynchrone** pour limiter la charge sur Colony.
 - Modules activés **uniquement à l’usage**.
 - Appels réseau **par API**.
+- UI réalisée exclusivement avec **Iced**.
 
 ## Format recommandé (à adapter)
 

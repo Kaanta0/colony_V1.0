@@ -18,7 +18,7 @@ Ce dossier centralise la documentation du projet Colony (architecture, configura
 
 ## Décisions récentes
 
-- **UI** : Slint est adopté pour l’interface graphique.
+- **UI** : Iced est adopté pour l’interface graphique.
 - **Configuration** : `config/colony.toml` définit les dossiers à scanner et les paramètres de scan.
 
 ## À maintenir
