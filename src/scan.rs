@@ -10,6 +10,7 @@ pub struct Application {
     pub exec: String,
     pub icon: Option<String>,
     pub category: AppCategory,
+    pub origin: AppOrigin,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -23,6 +24,13 @@ pub enum AppCategory {
     Utility,
     Game,
     Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum AppOrigin {
+    Windows,
+    Colony,
+    External,
 }
 
 pub fn scan_applications() -> Result<Vec<Application>> {
@@ -182,6 +190,7 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
         exec,
         icon: None,
         category,
+        origin: AppOrigin::Windows,
     })
 }
 
@@ -195,6 +204,7 @@ fn parse_exe_file(path: &Path) -> Option<Application> {
         exec,
         icon: None,
         category: AppCategory::Other,
+        origin: AppOrigin::Windows,
     })
 }
 
@@ -316,6 +326,7 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         exec,
         icon,
         category: categorize_linux_app(&categories),
+        origin: AppOrigin::Colony,
     })
 }
 

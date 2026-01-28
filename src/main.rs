@@ -6,7 +6,7 @@ use iced::widget::{
 use iced::font::Weight;
 use iced::{color, Element, Fill, Font, Length, Theme};
 
-use scan::{AppCategory, Application};
+use scan::{AppCategory, AppOrigin, Application};
 
 pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
@@ -39,6 +39,7 @@ fn app_font_with_weight(weight: Weight) -> Font {
 #[derive(Debug, Clone, PartialEq)]
 enum Category {
     All,
+    Windows,
     Development,
     Graphics,
     Network,
@@ -54,6 +55,7 @@ impl Category {
     fn label(&self) -> &'static str {
         match self {
             Category::All => "All",
+            Category::Windows => "Windows",
             Category::Development => "Development",
             Category::Graphics => "Graphics",
             Category::Network => "Network",
@@ -69,6 +71,7 @@ impl Category {
     fn icon(&self) -> &'static str {
         match self {
             Category::All => "\u{f00a}",
+            Category::Windows => "\u{f17a}",
             Category::Development => "\u{f121}",
             Category::Graphics => "\u{f1fc}",
             Category::Network => "\u{f0ac}",
@@ -84,6 +87,7 @@ impl Category {
     fn matches(&self, app_category: &AppCategory) -> bool {
         match self {
             Category::All => true,
+            Category::Windows => false,
             Category::Development => matches!(app_category, AppCategory::Development),
             Category::Graphics => matches!(app_category, AppCategory::Graphics),
             Category::Network => matches!(app_category, AppCategory::Network),
@@ -209,6 +213,7 @@ impl App {
 
         let categories = [
             Category::All,
+            Category::Windows,
             Category::Development,
             Category::Graphics,
             Category::Network,
@@ -442,9 +447,20 @@ impl App {
         self.applications
             .iter()
             .filter(|app| {
-                // Category filter
-                if !self.selected_category.matches(&app.category) {
-                    return false;
+                match self.selected_category {
+                    Category::Windows => {
+                        if app.origin != AppOrigin::Windows {
+                            return false;
+                        }
+                    }
+                    _ => {
+                        if app.origin == AppOrigin::Windows {
+                            return false;
+                        }
+                        if !self.selected_category.matches(&app.category) {
+                            return false;
+                        }
+                    }
                 }
                 // Search filter
                 if query.is_empty() {
