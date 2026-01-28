@@ -1,41 +1,89 @@
 mod scan;
 mod sections;
 
+use iced::font::{self, Weight};
 use iced::widget::{
     button, column, container, row, scrollable, text, text_input, Column, Row,
 };
-use iced::font::Weight;
-use iced::{color, Element, Fill, Font, Length, Theme};
+use iced::{color, Element, Fill, Font, Length, Task, Theme};
+use std::path::Path;
 
 use scan::Application;
 use sections::Section;
 
 pub fn main() -> iced::Result {
-    iced::application(App::default, App::update, App::view)
+    let font_assets = FontAssets::discover();
+    let default_font = font_assets.default_font();
+
+    iced::application(
+        move || App::boot(font_assets.clone()),
+        App::update,
+        App::view,
+    )
         .title(App::title)
         .theme(App::theme)
-        .font(include_bytes!(
-            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Regular.ttf"
-        ))
-        .font(include_bytes!(
-            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Medium.ttf"
-        ))
-        .font(include_bytes!(
-            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Bold.ttf"
-        ))
-        .default_font(app_font())
+        .default_font(default_font)
         .window_size((1000.0, 700.0))
         .run()
 }
 
 const APP_FONT_NAME: &str = "JetBrainsMono Nerd Font";
+const APP_FONT_FILES: [&str; 3] = [
+    "JetBrainsMonoNerdFont-Regular.ttf",
+    "JetBrainsMonoNerdFont-Medium.ttf",
+    "JetBrainsMonoNerdFont-Bold.ttf",
+];
 
-fn app_font() -> Font {
-    Font::with_name(APP_FONT_NAME)
+#[derive(Clone)]
+struct FontAssets {
+    bytes: Vec<Vec<u8>>,
+    complete: bool,
 }
 
-fn app_font_with_weight(weight: Weight) -> Font {
-    Font { weight, ..app_font() }
+impl FontAssets {
+    fn discover() -> Self {
+        let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
+        let mut bytes = Vec::new();
+        let mut complete = true;
+
+        for font_file in APP_FONT_FILES {
+            let font_path = assets_dir.join(font_file);
+            match std::fs::read(&font_path) {
+                Ok(data) => bytes.push(data),
+                Err(error) => {
+                    complete = false;
+                    eprintln!(
+                        "Font asset missing or unreadable: {} ({error})",
+                        font_path.display()
+                    );
+                }
+            }
+        }
+
+        Self { bytes, complete }
+    }
+
+    fn default_font(&self) -> Font {
+        if self.complete {
+            Font::with_name(APP_FONT_NAME)
+        } else {
+            Font::MONOSPACE
+        }
+    }
+
+    fn load_task(&self) -> Task<Message> {
+        if !self.complete {
+            return Task::none();
+        }
+
+        Task::batch(
+            self.bytes
+                .iter()
+                .cloned()
+                .map(|data| font::load(data).map(Message::FontLoaded)),
+        )
+    }
 }
 
 struct App {
@@ -44,10 +92,11 @@ struct App {
     sections: Vec<Section>,
     selected_section: usize,
     status_message: String,
+    font: Font,
 }
 
-impl Default for App {
-    fn default() -> Self {
+impl App {
+    fn boot(font_assets: FontAssets) -> (Self, Task<Message>) {
         let applications = scan::scan_applications().unwrap_or_else(|e| {
             eprintln!("Scan error: {e}");
             Vec::new()
@@ -57,13 +106,18 @@ impl Default for App {
 
         let sections = sections::load_sections();
 
-        Self {
+        let font = font_assets.default_font();
+
+        let app = Self {
             applications,
             search_query: String::new(),
             sections,
             selected_section: 0,
             status_message,
-        }
+            font,
+        };
+
+        (app, font_assets.load_task())
     }
 }
 
@@ -73,6 +127,7 @@ enum Message {
     SectionSelected(usize),
     Rescan,
     LaunchApp(String),
+    FontLoaded(Result<(), font::Error>),
 }
 
 impl App {
@@ -80,7 +135,7 @@ impl App {
         String::from("Colony Launcher")
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SearchChanged(query) => {
                 self.search_query = query;
@@ -125,7 +180,10 @@ impl App {
                     }
                 }
             }
+            Message::FontLoaded(_) => {}
         }
+
+        Task::none()
     }
 
     fn view(&self) -> Element<'_, Message> {
@@ -143,11 +201,11 @@ impl App {
     fn view_sidebar(&self) -> Element<'_, Message> {
         let title = text("Colony")
             .size(30)
-            .font(app_font_with_weight(Weight::Bold));
+            .font(self.app_font_with_weight(Weight::Bold));
 
         let category_header = text("Catégories")
             .size(13)
-            .font(app_font())
+            .font(self.app_font())
             .color(color!(0x8a8aa3));
 
         let category_buttons: Vec<Element<'_, Message>> = self
@@ -160,7 +218,7 @@ impl App {
         let category_list = Column::with_children(category_buttons).spacing(4);
         let category_scroll = scrollable(category_list).height(Length::Fill);
 
-        let rescan_btn = button(text("Rescan").size(13).font(app_font()))
+        let rescan_btn = button(text("Rescan").size(13).font(self.app_font()))
             .on_press(Message::Rescan)
             .padding([8, 16])
             .width(Fill);
@@ -212,12 +270,12 @@ impl App {
 
         let icon = text(section.icon.clone())
             .size(15)
-            .font(app_font())
+            .font(self.app_font())
             .color(text_color);
 
         let label = text(section.name.clone())
             .size(14)
-            .font(app_font())
+            .font(self.app_font())
             .color(text_color);
 
         let content = row![indicator, icon, label]
@@ -258,7 +316,7 @@ impl App {
 
         let status = text(&self.status_message)
             .size(12)
-            .font(app_font())
+            .font(self.app_font())
             .color(color!(0x888899));
 
         let header = row![search, status]
@@ -308,7 +366,7 @@ impl App {
             let mut row_items: Vec<Element<'_, Message>> = Vec::new();
 
             for app in chunk {
-                row_items.push(Self::view_app_card(app));
+                row_items.push(self.view_app_card(app));
             }
 
             while row_items.len() < 4 {
@@ -323,17 +381,17 @@ impl App {
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_app_card(app: &Application) -> Element<'_, Message> {
+    fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
         let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
-            .font(app_font_with_weight(Weight::Medium))
+            .font(self.app_font_with_weight(Weight::Medium))
             .color(color!(0x8888ff));
 
         let name = text(app.name.clone())
             .size(14)
-            .font(app_font())
+            .font(self.app_font())
             .color(color!(0xffffff));
 
         let card_content = column![
@@ -388,6 +446,14 @@ impl App {
                 app.name.to_lowercase().contains(&query)
             })
             .collect()
+    }
+
+    fn app_font(&self) -> Font {
+        self.font
+    }
+
+    fn app_font_with_weight(&self, weight: Weight) -> Font {
+        Font { weight, ..self.font }
     }
 
     fn theme(&self) -> Theme {
