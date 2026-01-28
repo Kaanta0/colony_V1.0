@@ -464,13 +464,37 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
     let name = name.ok_or_else(|| anyhow::anyhow!("No name found"))?;
     let exec = exec.ok_or_else(|| anyhow::anyhow!("No exec found"))?;
 
+    let origin = if is_colony_desktop_path(path) {
+        AppOrigin::Colony
+    } else {
+        AppOrigin::External
+    };
+
     Ok(Application {
         name,
         exec,
         icon,
         category: categorize_linux_app(&categories),
-        origin: AppOrigin::Colony,
+        origin,
     })
+}
+
+#[cfg(not(windows))]
+fn is_colony_desktop_path(path: &Path) -> bool {
+    if let Ok(home) = std::env::var("HOME") {
+        let colony_home = PathBuf::from(home).join(".local/share/colony/applications");
+        if path.starts_with(&colony_home) {
+            return true;
+        }
+    }
+
+    let colony_dirs = [
+        Path::new("/opt/colony/applications"),
+        Path::new("/usr/local/share/colony/applications"),
+        Path::new("/usr/share/colony/applications"),
+    ];
+
+    colony_dirs.iter().any(|dir| path.starts_with(dir))
 }
 
 #[cfg(not(windows))]
