@@ -1,9 +1,11 @@
+use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
+use reqwest::header::{ETAG, IF_NONE_MATCH};
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::manifest::{ColonyAppManifest, parse_manifest};
 use crate::metadata::load_local_metadata;
@@ -32,9 +34,10 @@ struct GithubRepo {
 
 pub async fn scan_github_apps() -> Result<Vec<Application>> {
     let user = load_github_user();
-    let repos = fetch_repos(&user).await?;
+    let mut etag_cache = GithubEtagCache::load();
+    let repos = fetch_repos(&user, &mut etag_cache).await?;
     let local_metadata = load_local_metadata();
-    let manifests = fetch_colony_manifests(&user, repos).await?;
+    let manifests = fetch_colony_manifests(&user, repos, &mut etag_cache).await?;
     let client = reqwest::Client::builder()
         .user_agent("colony-launcher")
         .build()
@@ -42,7 +45,7 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
     let mut apps = Vec::new();
 
     for manifest in manifests {
-        let readme = fetch_repo_readme(&client, &user, &manifest.repo_name).await;
+        let readme = fetch_repo_readme(&client, &user, &manifest.repo_name, &mut etag_cache).await;
         let description = readme
             .as_deref()
             .and_then(normalize_description)
@@ -52,12 +55,14 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
                     .as_deref()
                     .and_then(normalize_description)
             });
-        let language = fetch_repo_language(&client, &user, &manifest.repo_name).await;
+        let language =
+            fetch_repo_language(&client, &user, &manifest.repo_name, &mut etag_cache).await;
         let update = build_update_proposal(
             &client,
             &user,
             &manifest,
             local_metadata.get(&manifest.repo_name.to_lowercase()),
+            &mut etag_cache,
         )
         .await;
         apps.push(Application {
@@ -71,6 +76,7 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
             language,
         });
     }
+    etag_cache.save()?;
     Ok(apps)
 }
 
@@ -94,7 +100,7 @@ fn load_github_user() -> String {
         .unwrap_or_else(|| DEFAULT_GITHUB_USER.to_string())
 }
 
-async fn fetch_repos(user: &str) -> Result<Vec<GithubRepo>> {
+async fn fetch_repos(user: &str, etag_cache: &mut GithubEtagCache) -> Result<Vec<GithubRepo>> {
     let client = reqwest::Client::builder()
         .user_agent("colony-launcher")
         .build()
@@ -107,17 +113,17 @@ async fn fetch_repos(user: &str) -> Result<Vec<GithubRepo>> {
             "https://api.github.com/users/{}/repos?per_page={}&page={}",
             user, PER_PAGE, page
         );
-        let response = client
-            .get(url)
-            .send()
+        let response = get_cached_body(&client, &url, None, etag_cache)
             .await
-            .context("requesting GitHub repositories")?
-            .error_for_status()
-            .context("GitHub API returned an error status")?;
-        let chunk: Vec<GithubRepo> = response
-            .json()
-            .await
-            .context("decoding GitHub repository list")?;
+            .context("requesting GitHub repositories")?;
+        let chunk: Vec<GithubRepo> = match response {
+            CachedBody::Body(body) => {
+                serde_json::from_str(&body).context("decoding GitHub repository list")?
+            }
+            CachedBody::NotFound => {
+                bail!("GitHub API returned a not found status");
+            }
+        };
         if chunk.is_empty() {
             break;
         }
@@ -159,6 +165,7 @@ struct GithubReleaseAsset {
 async fn fetch_colony_manifests(
     user: &str,
     repos: Vec<GithubRepo>,
+    etag_cache: &mut GithubEtagCache,
 ) -> Result<Vec<ColonyRepoManifest>> {
     let client = reqwest::Client::builder()
         .user_agent("colony-launcher")
@@ -167,7 +174,7 @@ async fn fetch_colony_manifests(
     let mut manifests = Vec::new();
 
     for repo in repos {
-        let manifest = fetch_colony_manifest(&client, user, &repo).await?;
+        let manifest = fetch_colony_manifest(&client, user, &repo, etag_cache).await?;
         if let Some(manifest) = manifest {
             manifests.push(ColonyRepoManifest {
                 name: manifest.name,
@@ -188,14 +195,21 @@ async fn build_update_proposal(
     user: &str,
     manifest: &ColonyRepoManifest,
     local_metadata: Option<&crate::metadata::LocalAppMetadata>,
+    etag_cache: &mut GithubEtagCache,
 ) -> Option<UpdateProposal> {
     let platform = current_platform();
     if !platform_supported(platform, &manifest.platforms) {
         return None;
     }
     let latest_release =
-        fetch_latest_compatible_release(client, user, &manifest.repo_name, &manifest.release_files)
-            .await?;
+        fetch_latest_compatible_release(
+            client,
+            user,
+            &manifest.repo_name,
+            &manifest.release_files,
+            etag_cache,
+        )
+        .await?;
 
     let local_version = local_metadata.map(|metadata| metadata.version.clone());
     let update_available = match local_version.as_deref() {
@@ -250,13 +264,17 @@ async fn fetch_latest_compatible_release(
     user: &str,
     repo: &str,
     required_files: &[String],
+    etag_cache: &mut GithubEtagCache,
 ) -> Option<CompatibleRelease> {
     let url = format!(
         "https://api.github.com/repos/{}/{}/releases?per_page={}",
         user, repo, PER_PAGE
     );
-    let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
-    let releases: Vec<GithubRelease> = response.json().await.ok()?;
+    let response = get_cached_body(client, &url, None, etag_cache).await.ok()?;
+    let releases: Vec<GithubRelease> = match response {
+        CachedBody::Body(body) => serde_json::from_str(&body).ok()?,
+        CachedBody::NotFound => return None,
+    };
 
     let mut best: Option<(Version, CompatibleRelease)> = None;
 
@@ -300,29 +318,24 @@ async fn fetch_colony_manifest(
     client: &reqwest::Client,
     user: &str,
     repo: &GithubRepo,
+    etag_cache: &mut GithubEtagCache,
 ) -> Result<Option<ColonyAppManifest>> {
     let url = format!(
         "https://api.github.com/repos/{}/{}/contents/colony.json",
         user, repo.name
     );
-    let response = client
-        .get(url)
-        .header("Accept", "application/vnd.github.raw")
-        .send()
-        .await
-        .with_context(|| format!("requesting colony.json for {}", repo.name))?;
-
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(None);
-    }
-
-    let response = response
-        .error_for_status()
-        .with_context(|| format!("GitHub API returned an error status for {}", repo.name))?;
-    let contents = response
-        .text()
-        .await
-        .with_context(|| format!("reading colony.json for {}", repo.name))?;
+    let response = get_cached_body(
+        client,
+        &url,
+        Some("application/vnd.github.raw"),
+        etag_cache,
+    )
+    .await
+    .with_context(|| format!("requesting colony.json for {}", repo.name))?;
+    let contents = match response {
+        CachedBody::Body(body) => body,
+        CachedBody::NotFound => return Ok(None),
+    };
 
     match parse_manifest(&contents) {
         Ok(manifest) => Ok(Some(manifest)),
@@ -333,21 +346,25 @@ async fn fetch_colony_manifest(
     }
 }
 
-async fn fetch_repo_readme(client: &reqwest::Client, user: &str, repo: &str) -> Option<String> {
+async fn fetch_repo_readme(
+    client: &reqwest::Client,
+    user: &str,
+    repo: &str,
+    etag_cache: &mut GithubEtagCache,
+) -> Option<String> {
     let url = format!("https://api.github.com/repos/{}/{}/readme", user, repo);
-    let response = client
-        .get(url)
-        .header("Accept", "application/vnd.github.raw")
-        .send()
-        .await
-        .ok()?;
-
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
-        return None;
-    }
-
-    let response = response.error_for_status().ok()?;
-    let contents = response.text().await.ok()?;
+    let response = get_cached_body(
+        client,
+        &url,
+        Some("application/vnd.github.raw"),
+        etag_cache,
+    )
+    .await
+    .ok()?;
+    let contents = match response {
+        CachedBody::Body(body) => body,
+        CachedBody::NotFound => return None,
+    };
     if contents.trim().is_empty() {
         None
     } else {
@@ -355,10 +372,18 @@ async fn fetch_repo_readme(client: &reqwest::Client, user: &str, repo: &str) -> 
     }
 }
 
-async fn fetch_repo_language(client: &reqwest::Client, user: &str, repo: &str) -> Option<String> {
+async fn fetch_repo_language(
+    client: &reqwest::Client,
+    user: &str,
+    repo: &str,
+    etag_cache: &mut GithubEtagCache,
+) -> Option<String> {
     let url = format!("https://api.github.com/repos/{}/{}/languages", user, repo);
-    let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
-    let languages: std::collections::HashMap<String, u64> = response.json().await.ok()?;
+    let response = get_cached_body(client, &url, None, etag_cache).await.ok()?;
+    let languages: HashMap<String, u64> = match response {
+        CachedBody::Body(body) => serde_json::from_str(&body).ok()?,
+        CachedBody::NotFound => return None,
+    };
 
     languages
         .into_iter()
@@ -390,4 +415,96 @@ fn truncate_text(value: &str, max_len: usize) -> String {
     let mut truncated = value.chars().take(max_len - 1).collect::<String>();
     truncated.push('…');
     truncated
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+struct GithubEtagCache {
+    entries: HashMap<String, CacheEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CacheEntry {
+    etag: String,
+    body: String,
+}
+
+impl GithubEtagCache {
+    fn load() -> Self {
+        let path = cache_path();
+        let contents = match fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(_) => return Self::default(),
+        };
+        serde_json::from_str(&contents).unwrap_or_default()
+    }
+
+    fn save(&self) -> Result<()> {
+        let path = cache_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("creating cache directory {}", parent.display()))?;
+        }
+        let contents =
+            serde_json::to_string_pretty(self).context("serializing GitHub ETag cache")?;
+        fs::write(&path, contents).with_context(|| format!("writing {}", path.display()))?;
+        Ok(())
+    }
+
+    fn get(&self, url: &str) -> Option<&CacheEntry> {
+        self.entries.get(url)
+    }
+
+    fn update(&mut self, url: &str, etag: String, body: String) {
+        self.entries.insert(url.to_string(), CacheEntry { etag, body });
+    }
+}
+
+fn cache_path() -> PathBuf {
+    Path::new("config").join("github_etag_cache.json")
+}
+
+enum CachedBody {
+    Body(String),
+    NotFound,
+}
+
+async fn get_cached_body(
+    client: &reqwest::Client,
+    url: &str,
+    accept: Option<&str>,
+    etag_cache: &mut GithubEtagCache,
+) -> Result<CachedBody> {
+    let mut request = client.get(url);
+    if let Some(accept) = accept {
+        request = request.header("Accept", accept);
+    }
+    if let Some(entry) = etag_cache.get(url) {
+        request = request.header(IF_NONE_MATCH, entry.etag.clone());
+    }
+    let response = request.send().await.context("sending GitHub request")?;
+    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if let Some(entry) = etag_cache.get(url) {
+            return Ok(CachedBody::Body(entry.body.clone()));
+        }
+        return Err(anyhow!("received 304 without a cached body for {}", url));
+    }
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(CachedBody::NotFound);
+    }
+    let response = response
+        .error_for_status()
+        .with_context(|| format!("GitHub API returned an error status for {}", url))?;
+    let etag = response
+        .headers()
+        .get(ETAG)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string());
+    let body = response
+        .text()
+        .await
+        .with_context(|| format!("reading response body for {}", url))?;
+    if let Some(etag) = etag {
+        etag_cache.update(url, etag, body.clone());
+    }
+    Ok(CachedBody::Body(body))
 }
