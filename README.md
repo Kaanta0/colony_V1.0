@@ -12,7 +12,7 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 
 - **Langage** : Rust
 - **Build** : Cargo (`Cargo.toml` + `Cargo.lock`)
-- **UI** : `slint`
+- **UI** : `iced`
 
 ## Obligations à respecter (permanent)
 
