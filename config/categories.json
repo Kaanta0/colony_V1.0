@@ -1,7 +1,5 @@
 [
-  { "name": "All", "icon": "\uf00a", "origin": "any", "category": "all" },
-  { "name": "Colony Apps", "icon": "\uf135", "origin": "colony", "category": "all" },
-  { "name": "External Apps", "icon": "\uf08e", "origin": "external", "category": "all" },
+  { "name": "All", "icon": "\uf00a", "origin": "non_windows", "category": "all" },
   { "name": "Windows", "icon": "\uf17a", "origin": "windows", "category": "all" },
   { "name": "Development", "icon": "\uf121", "origin": "non_windows", "category": "development" },
   { "name": "Graphics", "icon": "\uf1fc", "origin": "non_windows", "category": "graphics" },
