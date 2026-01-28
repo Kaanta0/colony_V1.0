@@ -11,6 +11,7 @@ use crate::scan::{AppCategory, AppOrigin, Application, UpdateProposal};
 
 const DEFAULT_GITHUB_USER: &str = "MotherSphere";
 const PER_PAGE: usize = 100;
+const DESCRIPTION_LIMIT: usize = 200;
 
 #[derive(Debug, Deserialize)]
 struct ColonyConfig {
@@ -26,6 +27,7 @@ struct GithubConfig {
 struct GithubRepo {
     name: String,
     html_url: String,
+    description: Option<String>,
 }
 
 pub async fn scan_github_apps() -> Result<Vec<Application>> {
@@ -40,6 +42,17 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
     let mut apps = Vec::new();
 
     for manifest in manifests {
+        let readme = fetch_repo_readme(&client, &user, &manifest.repo_name).await;
+        let description = readme
+            .as_deref()
+            .and_then(normalize_description)
+            .or_else(|| {
+                manifest
+                    .description
+                    .as_deref()
+                    .and_then(normalize_description)
+            });
+        let language = fetch_repo_language(&client, &user, &manifest.repo_name).await;
         let update = build_update_proposal(
             &client,
             &user,
@@ -54,6 +67,8 @@ pub async fn scan_github_apps() -> Result<Vec<Application>> {
             category: AppCategory::Development,
             origin: AppOrigin::External,
             update,
+            description,
+            language,
         });
     }
     Ok(apps)
@@ -124,6 +139,7 @@ struct ColonyRepoManifest {
     platforms: Vec<String>,
     release_files: Vec<String>,
     repo_url: String,
+    description: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,6 +175,7 @@ async fn fetch_colony_manifests(
                 platforms: manifest.platforms,
                 release_files: manifest.release_files,
                 repo_url: repo.html_url,
+                description: repo.description,
             });
         }
     }
@@ -314,4 +331,63 @@ async fn fetch_colony_manifest(
             Ok(None)
         }
     }
+}
+
+async fn fetch_repo_readme(client: &reqwest::Client, user: &str, repo: &str) -> Option<String> {
+    let url = format!("https://api.github.com/repos/{}/{}/readme", user, repo);
+    let response = client
+        .get(url)
+        .header("Accept", "application/vnd.github.raw")
+        .send()
+        .await
+        .ok()?;
+
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return None;
+    }
+
+    let response = response.error_for_status().ok()?;
+    let contents = response.text().await.ok()?;
+    if contents.trim().is_empty() {
+        None
+    } else {
+        Some(contents)
+    }
+}
+
+async fn fetch_repo_language(client: &reqwest::Client, user: &str, repo: &str) -> Option<String> {
+    let url = format!("https://api.github.com/repos/{}/{}/languages", user, repo);
+    let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
+    let languages: std::collections::HashMap<String, u64> = response.json().await.ok()?;
+
+    languages
+        .into_iter()
+        .max_by_key(|(_, bytes)| *bytes)
+        .map(|(language, _)| language)
+}
+
+fn normalize_description(value: &str) -> Option<String> {
+    let cleaned = value
+        .split_whitespace()
+        .filter(|chunk| !chunk.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(truncate_text(&cleaned, DESCRIPTION_LIMIT))
+    }
+}
+
+fn truncate_text(value: &str, max_len: usize) -> String {
+    let length = value.chars().count();
+    if length <= max_len {
+        return value.to_string();
+    }
+    if max_len <= 1 {
+        return "…".to_string();
+    }
+    let mut truncated = value.chars().take(max_len - 1).collect::<String>();
+    truncated.push('…');
+    truncated
 }
