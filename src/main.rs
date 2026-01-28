@@ -3,6 +3,7 @@ mod scan;
 use iced::widget::{
     button, column, container, row, scrollable, text, text_input, Column, Row,
 };
+use iced::font::Weight;
 use iced::{color, Element, Fill, Font, Length, Theme};
 
 use scan::{AppCategory, Application};
@@ -11,8 +12,28 @@ pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
         .title(App::title)
         .theme(App::theme)
+        .font(include_bytes!(
+            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Regular.ttf"
+        ))
+        .font(include_bytes!(
+            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Medium.ttf"
+        ))
+        .font(include_bytes!(
+            "ui/assets/fonts/JetBrainsMonoNerdFont/JetBrainsMonoNerdFont-Bold.ttf"
+        ))
+        .default_font(app_font())
         .window_size((1000.0, 700.0))
         .run()
+}
+
+const APP_FONT_NAME: &str = "JetBrainsMono Nerd Font";
+
+fn app_font() -> Font {
+    Font::with_name(APP_FONT_NAME)
+}
+
+fn app_font_with_weight(weight: Weight) -> Font {
+    Font { weight, ..app_font() }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,16 +68,16 @@ impl Category {
 
     fn icon(&self) -> &'static str {
         match self {
-            Category::All => "*",
-            Category::Development => "</>",
-            Category::Graphics => "~",
-            Category::Network => "@",
-            Category::Office => "#",
-            Category::Multimedia => ">",
-            Category::System => "$",
-            Category::Utility => "%",
-            Category::Game => "^",
-            Category::Other => "?",
+            Category::All => "\u{f00a}",
+            Category::Development => "\u{f121}",
+            Category::Graphics => "\u{f1fc}",
+            Category::Network => "\u{f0ac}",
+            Category::Office => "\u{f0f6}",
+            Category::Multimedia => "\u{f008}",
+            Category::System => "\u{f085}",
+            Category::Utility => "\u{f0ad}",
+            Category::Game => "\u{f11b}",
+            Category::Other => "\u{f128}",
         }
     }
 
@@ -178,8 +199,13 @@ impl App {
 
     fn view_sidebar(&self) -> Element<'_, Message> {
         let title = text("Colony")
-            .size(28)
-            .font(Font::MONOSPACE);
+            .size(30)
+            .font(app_font_with_weight(Weight::Bold));
+
+        let category_header = text("Catégories")
+            .size(13)
+            .font(app_font())
+            .color(color!(0x8a8aa3));
 
         let categories = [
             Category::All,
@@ -199,9 +225,9 @@ impl App {
             .map(|cat| self.view_category_button(cat))
             .collect();
 
-        let category_list = Column::with_children(category_buttons).spacing(4);
+        let category_list = Column::with_children(category_buttons).spacing(8);
 
-        let rescan_btn = button(text("Rescan").size(14))
+        let rescan_btn = button(text("Rescan").size(13).font(app_font()))
             .on_press(Message::Rescan)
             .padding([8, 16])
             .width(Fill);
@@ -209,11 +235,12 @@ impl App {
         let sidebar_content = column![
             title,
             container(text("")).height(24),
+            category_header,
             category_list,
             container(text("")).height(Length::Fill),
             rescan_btn,
         ]
-        .spacing(8)
+        .spacing(10)
         .padding(16)
         .width(200);
 
@@ -229,9 +256,42 @@ impl App {
     fn view_category_button(&self, category: Category) -> Element<'_, Message> {
         let is_selected = self.selected_category == category;
 
-        let label = text(format!("{} {}", category.icon(), category.label())).size(14);
+        let text_color = if is_selected {
+            color!(0xffffff)
+        } else {
+            color!(0x9a9ab5)
+        };
 
-        let btn = button(label)
+        let indicator = container(text(""))
+            .width(4)
+            .height(Length::Fill)
+            .style(move |_theme| container::Style {
+                background: Some(
+                    if is_selected {
+                        color!(0x6b6bd6)
+                    } else {
+                        iced::Color::TRANSPARENT
+                    }
+                    .into(),
+                ),
+                ..Default::default()
+            });
+
+        let icon = text(category.icon())
+            .size(15)
+            .font(app_font())
+            .color(text_color);
+
+        let label = text(category.label())
+            .size(14)
+            .font(app_font())
+            .color(text_color);
+
+        let content = row![indicator, icon, label]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
+
+        let btn = button(content)
             .on_press(Message::CategorySelected(category))
             .padding([10, 14])
             .width(Fill)
@@ -265,6 +325,7 @@ impl App {
 
         let status = text(&self.status_message)
             .size(12)
+            .font(app_font())
             .color(color!(0x888899));
 
         let header = row![search, status]
@@ -334,11 +395,12 @@ impl App {
 
         let icon = text(icon_char.to_string())
             .size(32)
-            .font(Font::MONOSPACE)
+            .font(app_font_with_weight(Weight::Medium))
             .color(color!(0x8888ff));
 
         let name = text(app.name.clone())
-            .size(13)
+            .size(14)
+            .font(app_font())
             .color(color!(0xffffff));
 
         let card_content = column![
