@@ -1,4 +1,5 @@
 mod scan;
+mod sections;
 
 use iced::widget::{
     button, column, container, row, scrollable, text, text_input, Column, Row,
@@ -6,7 +7,8 @@ use iced::widget::{
 use iced::font::Weight;
 use iced::{color, Element, Fill, Font, Length, Theme};
 
-use scan::{AppCategory, AppOrigin, Application};
+use scan::Application;
+use sections::Section;
 
 pub fn main() -> iced::Result {
     iced::application(App::default, App::update, App::view)
@@ -36,81 +38,11 @@ fn app_font_with_weight(weight: Weight) -> Font {
     Font { weight, ..app_font() }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum Category {
-    All,
-    Windows,
-    Development,
-    Graphics,
-    Network,
-    Office,
-    Multimedia,
-    System,
-    Utility,
-    Game,
-    Other,
-}
-
-impl Category {
-    fn label(&self) -> &'static str {
-        match self {
-            Category::All => "All",
-            Category::Windows => "Windows",
-            Category::Development => "Development",
-            Category::Graphics => "Graphics",
-            Category::Network => "Network",
-            Category::Office => "Office",
-            Category::Multimedia => "Multimedia",
-            Category::System => "System",
-            Category::Utility => "Utilities",
-            Category::Game => "Games",
-            Category::Other => "Other",
-        }
-    }
-
-    fn icon(&self) -> &'static str {
-        match self {
-            Category::All => "\u{f00a}",
-            Category::Windows => "\u{f17a}",
-            Category::Development => "\u{f121}",
-            Category::Graphics => "\u{f1fc}",
-            Category::Network => "\u{f0ac}",
-            Category::Office => "\u{f0f6}",
-            Category::Multimedia => "\u{f008}",
-            Category::System => "\u{f085}",
-            Category::Utility => "\u{f0ad}",
-            Category::Game => "\u{f11b}",
-            Category::Other => "\u{f128}",
-        }
-    }
-
-    fn matches(&self, app_category: &AppCategory) -> bool {
-        match self {
-            Category::All => true,
-            Category::Windows => false,
-            Category::Development => matches!(app_category, AppCategory::Development),
-            Category::Graphics => matches!(app_category, AppCategory::Graphics),
-            Category::Network => matches!(app_category, AppCategory::Network),
-            Category::Office => matches!(app_category, AppCategory::Office),
-            Category::Multimedia => matches!(app_category, AppCategory::Multimedia),
-            Category::System => matches!(app_category, AppCategory::System),
-            Category::Utility => matches!(app_category, AppCategory::Utility),
-            Category::Game => matches!(app_category, AppCategory::Game),
-            Category::Other => matches!(app_category, AppCategory::Other),
-        }
-    }
-}
-
-impl Default for Category {
-    fn default() -> Self {
-        Category::All
-    }
-}
-
 struct App {
     applications: Vec<Application>,
     search_query: String,
-    selected_category: Category,
+    sections: Vec<Section>,
+    selected_section: usize,
     status_message: String,
 }
 
@@ -123,10 +55,13 @@ impl Default for App {
 
         let status_message = format!("{} applications found", applications.len());
 
+        let sections = sections::load_sections();
+
         Self {
             applications,
             search_query: String::new(),
-            selected_category: Category::All,
+            sections,
+            selected_section: 0,
             status_message,
         }
     }
@@ -135,7 +70,7 @@ impl Default for App {
 #[derive(Debug, Clone)]
 enum Message {
     SearchChanged(String),
-    CategorySelected(Category),
+    SectionSelected(usize),
     Rescan,
     LaunchApp(String),
 }
@@ -150,8 +85,10 @@ impl App {
             Message::SearchChanged(query) => {
                 self.search_query = query;
             }
-            Message::CategorySelected(category) => {
-                self.selected_category = category;
+            Message::SectionSelected(index) => {
+                if index < self.sections.len() {
+                    self.selected_section = index;
+                }
             }
             Message::Rescan => {
                 match scan::scan_applications() {
@@ -211,23 +148,11 @@ impl App {
             .font(app_font())
             .color(color!(0x8a8aa3));
 
-        let categories = [
-            Category::All,
-            Category::Windows,
-            Category::Development,
-            Category::Graphics,
-            Category::Network,
-            Category::Office,
-            Category::Multimedia,
-            Category::System,
-            Category::Utility,
-            Category::Game,
-            Category::Other,
-        ];
-
-        let category_buttons: Vec<Element<'_, Message>> = categories
-            .into_iter()
-            .map(|cat| self.view_category_button(cat))
+        let category_buttons: Vec<Element<'_, Message>> = self
+            .sections
+            .iter()
+            .enumerate()
+            .map(|(index, section)| self.view_section_button(index, section))
             .collect();
 
         let category_list = Column::with_children(category_buttons).spacing(4);
@@ -259,8 +184,8 @@ impl App {
             .into()
     }
 
-    fn view_category_button(&self, category: Category) -> Element<'_, Message> {
-        let is_selected = self.selected_category == category;
+    fn view_section_button(&self, index: usize, section: &Section) -> Element<'_, Message> {
+        let is_selected = self.selected_section == index;
 
         let text_color = if is_selected {
             color!(0xffffff)
@@ -283,12 +208,12 @@ impl App {
                 ..Default::default()
             });
 
-        let icon = text(category.icon())
+        let icon = text(section.icon.clone())
             .size(15)
             .font(app_font())
             .color(text_color);
 
-        let label = text(category.label())
+        let label = text(section.name.clone())
             .size(14)
             .font(app_font())
             .color(text_color);
@@ -298,7 +223,7 @@ impl App {
             .align_y(iced::Alignment::Center);
 
         let btn = button(content)
-            .on_press(Message::CategorySelected(category))
+            .on_press(Message::SectionSelected(index))
             .padding([10, 14])
             .width(Fill)
             .style(move |theme, status| {
@@ -445,22 +370,13 @@ impl App {
 
     fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
+        let selected_section = self.sections.get(self.selected_section);
         self.applications
             .iter()
             .filter(|app| {
-                match self.selected_category {
-                    Category::Windows => {
-                        if app.origin != AppOrigin::Windows {
-                            return false;
-                        }
-                    }
-                    _ => {
-                        if app.origin == AppOrigin::Windows {
-                            return false;
-                        }
-                        if !self.selected_category.matches(&app.category) {
-                            return false;
-                        }
+                if let Some(section) = selected_section {
+                    if !section.filter.matches(app) {
+                        return false;
                     }
                 }
                 // Search filter

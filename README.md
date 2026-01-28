@@ -46,8 +46,26 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 cargo run
 ```
 
-La configuration par défaut est dans `config/colony.toml`. Vous pouvez pointer un autre fichier
-en définissant la variable d’environnement `COLONY_CONFIG`.
+### Configuration des sections
+
+Les sections affichées dans la sidebar sont définies dans `config/categories.json`. Chaque entrée
+décrit le nom, l’icône et le filtre à appliquer :
+
+```json
+[
+  { "name": "All", "icon": "\uf00a", "origin": "non_windows", "category": "all" },
+  { "name": "Windows", "icon": "\uf17a", "origin": "windows", "category": "all" }
+]
+```
+
+- `name` : libellé affiché.
+- `icon` : caractère unicode (icônes Nerd Font).
+- `origin` : filtre d’origine (`any`, `windows`, `non_windows`).
+- `category` : filtre de catégorie (`development`, `graphics`, `network`, `office`, `multimedia`,
+  `system`, `utility`, `game`, `other`, ou `all`).
+
+Si le fichier est absent ou invalide, l’application retombe sur les sections par défaut
+codées en interne.
 
 Les instructions de build/exécution seront ajoutées une fois la base Rust en place.
 
