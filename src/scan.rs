@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use serde::Deserialize;
 
 #[derive(Debug, Clone)]
 pub struct Application {
@@ -33,6 +34,17 @@ pub enum AppOrigin {
     External,
 }
 
+#[derive(Debug, Deserialize)]
+struct ColonyConfig {
+    scan: Option<ScanConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ScanConfig {
+    windows: Option<Vec<String>>,
+    unix: Option<Vec<String>>,
+}
+
 pub fn scan_applications() -> Result<Vec<Application>> {
     let mut apps = Vec::new();
     let mut seen_names: HashMap<String, bool> = HashMap::new();
@@ -58,6 +70,42 @@ pub fn scan_applications() -> Result<Vec<Application>> {
 
 #[cfg(windows)]
 fn get_application_dirs() -> Vec<PathBuf> {
+    if let Some(dirs) = load_scan_dirs_from_config() {
+        return dirs;
+    }
+
+    default_windows_dirs()
+}
+
+#[cfg(windows)]
+fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
+    let path = Path::new("config/colony.toml");
+    let content = fs::read_to_string(path).ok()?;
+    let config: ColonyConfig = match toml::from_str(&content) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!(
+                "[scan] Invalid config {}: {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let dirs = config.scan?.windows?;
+    let expanded: Vec<PathBuf> = dirs
+        .into_iter()
+        .map(|dir| PathBuf::from(expand_env_vars(&dir)))
+        .collect();
+    if expanded.is_empty() {
+        None
+    } else {
+        Some(expanded)
+    }
+}
+
+#[cfg(windows)]
+fn default_windows_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
     // Common Start Menu (all users)
@@ -81,6 +129,42 @@ fn get_application_dirs() -> Vec<PathBuf> {
 
 #[cfg(not(windows))]
 fn get_application_dirs() -> Vec<PathBuf> {
+    if let Some(dirs) = load_scan_dirs_from_config() {
+        return dirs;
+    }
+
+    default_unix_dirs()
+}
+
+#[cfg(not(windows))]
+fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
+    let path = Path::new("config/colony.toml");
+    let content = fs::read_to_string(path).ok()?;
+    let config: ColonyConfig = match toml::from_str(&content) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!(
+                "[scan] Invalid config {}: {}",
+                path.display(),
+                error
+            );
+            return None;
+        }
+    };
+    let dirs = config.scan?.unix?;
+    let expanded: Vec<PathBuf> = dirs
+        .into_iter()
+        .map(|dir| PathBuf::from(expand_env_vars(&dir)))
+        .collect();
+    if expanded.is_empty() {
+        None
+    } else {
+        Some(expanded)
+    }
+}
+
+#[cfg(not(windows))]
+fn default_unix_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
     // User applications
@@ -111,6 +195,65 @@ fn get_application_dirs() -> Vec<PathBuf> {
     dirs.push(PathBuf::from("/var/lib/snapd/desktop/applications"));
 
     dirs
+}
+
+fn expand_env_vars(value: &str) -> String {
+    let mut output = String::new();
+    let mut chars = value.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' && matches!(chars.peek(), Some('{')) {
+            chars.next();
+            let mut name = String::new();
+            let mut closed = false;
+            while let Some(next) = chars.next() {
+                if next == '}' {
+                    closed = true;
+                    break;
+                }
+                name.push(next);
+            }
+            if closed {
+                if let Ok(value) = std::env::var(&name) {
+                    output.push_str(&value);
+                } else {
+                    output.push_str("${");
+                    output.push_str(&name);
+                    output.push('}');
+                }
+            } else {
+                output.push('$');
+                output.push('{');
+                output.push_str(&name);
+            }
+        } else if ch == '%' {
+            let mut name = String::new();
+            let mut closed = false;
+            while let Some(next) = chars.next() {
+                if next == '%' {
+                    closed = true;
+                    break;
+                }
+                name.push(next);
+            }
+            if closed {
+                if let Ok(value) = std::env::var(&name) {
+                    output.push_str(&value);
+                } else {
+                    output.push('%');
+                    output.push_str(&name);
+                    output.push('%');
+                }
+            } else {
+                output.push('%');
+                output.push_str(&name);
+            }
+        } else {
+            output.push(ch);
+        }
+    }
+
+    output
 }
 
 fn scan_directory(

@@ -67,6 +67,34 @@ décrit le nom, l’icône et le filtre à appliquer :
 Si le fichier est absent ou invalide, l’application retombe sur les sections par défaut
 codées en interne.
 
+### Configuration des dossiers de scan
+
+Les dossiers scannés pour détecter les applications sont définis dans `config/colony.toml` :
+
+```toml
+[scan]
+windows = [
+  "${ProgramData}\\Microsoft\\Windows\\Start Menu\\Programs",
+  "${APPDATA}\\Microsoft\\Windows\\Start Menu\\Programs",
+]
+
+unix = [
+  "${HOME}/.local/share/applications",
+  "/usr/share/applications",
+  "/usr/local/share/applications",
+  "/var/lib/flatpak/exports/share/applications",
+  "${HOME}/.local/share/flatpak/exports/share/applications",
+  "/var/lib/snapd/desktop/applications",
+]
+```
+
+- `windows` : liste explicite des dossiers à scanner sous Windows.
+- `unix` : liste explicite des dossiers à scanner sous Linux/macOS.
+- Les variables d’environnement `${...}` (et `%...%` côté Windows) sont résolues à l’exécution.
+
+Si le fichier est absent ou invalide, Colony utilise les valeurs historiques (Start Menu Windows,
+`$HOME/.local/share/applications`, `$XDG_DATA_DIRS` ou `/usr/share/applications`, etc.).
+
 Les instructions de build/exécution seront ajoutées une fois la base Rust en place.
 
 ---
