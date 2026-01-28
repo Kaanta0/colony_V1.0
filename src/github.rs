@@ -182,16 +182,7 @@ async fn fetch_colony_manifests(
     let mut manifests = Vec::new();
 
     for repo in repos {
-        let manifest = match fetch_colony_manifest(&client, user, &repo, etag_cache).await {
-            Ok(manifest) => manifest,
-            Err(error) => {
-                eprintln!(
-                    "[github] Skipping repo {} due to manifest error: {}",
-                    repo.name, error
-                );
-                None
-            }
-        };
+        let manifest = fetch_colony_manifest(&client, user, &repo, etag_cache).await?;
         if let Some(manifest) = manifest {
             manifests.push(ColonyRepoManifest {
                 name: manifest.name,
