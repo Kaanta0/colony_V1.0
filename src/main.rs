@@ -1,18 +1,17 @@
+mod colony_apps;
 mod github;
 mod manifest;
 mod scan;
 mod sections;
 
 use iced::font::{self, Weight};
-use iced::widget::{
-    button, column, container, row, scrollable, text, text_input, Column, Row,
-};
-use iced::{color, Element, Fill, Font, Length, Task, Theme};
+use iced::widget::{Column, Row, button, column, container, row, scrollable, text, text_input};
+use iced::{Element, Fill, Font, Length, Task, Theme, color};
 use std::path::Path;
 use std::time::Duration;
 
 use github::ColonySoftware;
-use scan::Application;
+use scan::{AppOrigin, Application};
 use sections::Section;
 
 pub fn main() -> iced::Result {
@@ -24,11 +23,11 @@ pub fn main() -> iced::Result {
         App::update,
         App::view,
     )
-        .title(App::title)
-        .theme(App::theme)
-        .default_font(default_font)
-        .window_size((1000.0, 700.0))
-        .run()
+    .title(App::title)
+    .theme(App::theme)
+    .default_font(default_font)
+    .window_size((1000.0, 700.0))
+    .run()
 }
 
 const APP_FONT_NAME: &str = "JetBrainsMono Nerd Font";
@@ -46,8 +45,8 @@ struct FontAssets {
 
 impl FontAssets {
     fn discover() -> Self {
-        let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
+        let assets_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
         let mut bytes = Vec::new();
         let mut complete = true;
 
@@ -91,7 +90,8 @@ impl FontAssets {
 }
 
 struct App {
-    applications: Vec<Application>,
+    local_applications: Vec<Application>,
+    colony_applications: Vec<Application>,
     search_query: String,
     sections: Vec<Section>,
     selected_section: usize,
@@ -103,19 +103,20 @@ struct App {
 
 impl App {
     fn boot(font_assets: FontAssets) -> (Self, Task<Message>) {
-        let applications = scan::scan_applications().unwrap_or_else(|e| {
+        let local_applications = scan::scan_applications().unwrap_or_else(|e| {
             eprintln!("Scan error: {e}");
             Vec::new()
         });
 
-        let status_message = format!("{} applications found", applications.len());
+        let status_message = format!("{} applications found", local_applications.len());
 
         let sections = sections::load_sections();
 
         let font = font_assets.default_font();
 
         let app = Self {
-            applications,
+            local_applications,
+            colony_applications: Vec::new(),
             search_query: String::new(),
             sections,
             selected_section: 0,
@@ -133,6 +134,10 @@ impl App {
                     github::scan_mothersphere_colony_software(),
                     Message::GithubScanFinished,
                 ),
+                Task::perform(
+                    colony_apps::scan_colony_applications(),
+                    Message::ColonyAppsScanFinished,
+                ),
             ]),
         )
     }
@@ -143,10 +148,12 @@ enum Message {
     SearchChanged(String),
     SectionSelected(usize),
     Rescan,
-    LaunchApp(String),
+    LaunchApp(Application),
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
     GithubScanFinished(Result<Vec<ColonySoftware>, anyhow::Error>),
+    ColonyAppsScanFinished(Result<Vec<Application>, anyhow::Error>),
+    ColonyLaunchFinished(Result<(), anyhow::Error>),
 }
 
 impl App {
@@ -169,20 +176,36 @@ impl App {
             Message::Rescan => {
                 match scan::scan_applications() {
                     Ok(apps) => {
-                        self.status_message = format!("{} applications found", apps.len());
-                        self.applications = apps;
+                        self.local_applications = apps;
+                        self.status_message =
+                            format!("{} applications found", self.total_applications());
                     }
                     Err(e) => {
                         self.status_message = format!("Error: {e}");
                     }
                 }
                 self.github_status = "Scan GitHub en cours...".to_string();
-                Task::perform(
-                    github::scan_mothersphere_colony_software(),
-                    Message::GithubScanFinished,
-                )
+                Task::batch([
+                    Task::perform(
+                        github::scan_mothersphere_colony_software(),
+                        Message::GithubScanFinished,
+                    ),
+                    Task::perform(
+                        colony_apps::scan_colony_applications(),
+                        Message::ColonyAppsScanFinished,
+                    ),
+                ])
             }
-            Message::LaunchApp(exec) => {
+            Message::LaunchApp(app) => {
+                if app.origin == AppOrigin::Colony {
+                    self.status_message = format!("Mise à jour en cours pour {}...", app.name);
+                    return Task::perform(
+                        colony_apps::update_and_launch(app),
+                        Message::ColonyLaunchFinished,
+                    );
+                }
+
+                let exec = app.exec.clone();
                 let launch_result = {
                     #[cfg(windows)]
                     {
@@ -205,9 +228,7 @@ impl App {
                                         .args(args)
                                         .spawn()
                                         .map(|_| ())
-                                        .map_err(|error| {
-                                            format!("Impossible de lancer: {error}")
-                                        })
+                                        .map_err(|error| format!("Impossible de lancer: {error}"))
                                 } else {
                                     Err("Impossible de lancer: commande vide".to_string())
                                 }
@@ -234,21 +255,49 @@ impl App {
                 Task::none()
             }
             Message::ClearStatus => {
-                self.status_message = format!("{} applications found", self.applications.len());
+                self.status_message = format!("{} applications found", self.total_applications());
                 Task::none()
             }
             Message::FontLoaded(_) => Task::none(),
             Message::GithubScanFinished(result) => {
                 match result {
                     Ok(items) => {
-                        self.github_status = format!(
-                            "{} logiciel(s) Colony détecté(s) sur GitHub",
-                            items.len()
-                        );
+                        self.github_status =
+                            format!("{} logiciel(s) Colony détecté(s) sur GitHub", items.len());
                         self.colony_software = items;
                     }
                     Err(error) => {
                         self.github_status = format!("Erreur GitHub: {error}");
+                    }
+                }
+                Task::none()
+            }
+            Message::ColonyAppsScanFinished(result) => {
+                match result {
+                    Ok(apps) => {
+                        self.colony_applications = apps;
+                        self.status_message =
+                            format!("{} applications found", self.total_applications());
+                    }
+                    Err(error) => {
+                        self.status_message = format!("Erreur Colony: {error}");
+                    }
+                }
+                Task::none()
+            }
+            Message::ColonyLaunchFinished(result) => {
+                match result {
+                    Ok(()) => {
+                        self.status_message = "Application lancée.".to_string();
+                        return Task::perform(
+                            async {
+                                std::thread::sleep(Duration::from_secs(4));
+                            },
+                            |_| Message::ClearStatus,
+                        );
+                    }
+                    Err(error) => {
+                        self.status_message = format!("Erreur Colony: {error}");
                     }
                 }
                 Task::none()
@@ -262,10 +311,7 @@ impl App {
 
         let main_layout = row![sidebar, content].spacing(0);
 
-        container(main_layout)
-            .width(Fill)
-            .height(Fill)
-            .into()
+        container(main_layout).width(Fill).height(Fill).into()
     }
 
     fn view_sidebar(&self) -> Element<'_, Message> {
@@ -493,16 +539,21 @@ impl App {
                 })
                 .collect();
 
-            Column::with_children(entries)
-                .spacing(6)
-                .into()
+            Column::with_children(entries).spacing(6).into()
         };
 
         column![heading, status, list].spacing(6).into()
     }
 
     fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
-        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
+        let icon_char = app
+            .name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .next()
+            .unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
@@ -515,9 +566,7 @@ impl App {
             .color(color!(0xffffff));
 
         let card_content = column![
-            container(icon)
-                .width(Fill)
-                .center_x(Fill),
+            container(icon).width(Fill).center_x(Fill),
             container(text("")).height(8),
             container(name)
                 .width(Fill)
@@ -529,9 +578,8 @@ impl App {
         .padding(16)
         .width(Fill);
 
-        let exec = app.exec.clone();
         button(card_content)
-            .on_press(Message::LaunchApp(exec))
+            .on_press(Message::LaunchApp(app.clone()))
             .padding(0)
             .width(Fill)
             .height(120)
@@ -554,8 +602,9 @@ impl App {
     fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
         let selected_section = self.sections.get(self.selected_section);
-        self.applications
+        self.local_applications
             .iter()
+            .chain(self.colony_applications.iter())
             .filter(|app| {
                 if let Some(section) = selected_section {
                     if !section.filter.matches(app) {
@@ -571,12 +620,19 @@ impl App {
             .collect()
     }
 
+    fn total_applications(&self) -> usize {
+        self.local_applications.len() + self.colony_applications.len()
+    }
+
     fn app_font(&self) -> Font {
         self.font
     }
 
     fn app_font_with_weight(&self, weight: Weight) -> Font {
-        Font { weight, ..self.font }
+        Font {
+            weight,
+            ..self.font
+        }
     }
 
     fn theme(&self) -> Theme {
