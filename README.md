@@ -12,7 +12,11 @@ Colony est un launcher pour l’écosystème d’applications du projet **Colony
 
 - **Langage** : Rust
 - **Build** : Cargo (`Cargo.toml` + `Cargo.lock`)
-- **UI** : `slint`
+- **UI actuelle** : `iced`
+- **UI cible** : `Slint`
+  - **Rationale** : Slint reste l’objectif long terme pour une UI déclarative
+    et performante. La base est cependant en cours de stabilisation côté
+    fonctionnalités et architecture, d’où l’usage actuel d’iced.
 
 ## Obligations à respecter (permanent)
 
