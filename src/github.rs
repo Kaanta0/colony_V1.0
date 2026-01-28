@@ -16,6 +16,8 @@ const DEFAULT_GITHUB_USER: &str = "MotherSphere";
 const MAX_RATE_LIMIT_RETRIES: usize = 3;
 const RATE_LIMIT_BACKOFF_BASE_SECS: u64 = 2;
 const RATE_LIMIT_BACKOFF_MAX_SECS: u64 = 60;
+const RATE_LIMIT_BACKOFF_TOTAL_MAX_SECS: u64 = 120;
+const REQUEST_TIMEOUT_SECS: u64 = 30;
 const PER_PAGE: usize = 100;
 const DESCRIPTION_LIMIT: usize = 200;
 
@@ -512,6 +514,7 @@ async fn get_cached_body(
     accept: Option<&str>,
     etag_cache: &mut GithubEtagCache,
 ) -> Result<CachedBody> {
+    let mut total_backoff = Duration::ZERO;
     for attempt in 0..=MAX_RATE_LIMIT_RETRIES {
         let mut request = client.get(url);
         if let Some(accept) = accept {
@@ -525,7 +528,12 @@ async fn get_cached_body(
                 request = request.header(IF_NONE_MATCH, etag.clone());
             }
         }
-        let response = request.send().await.context("sending GitHub request")?;
+        let response = tokio::time::timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS), request.send())
+            .await
+            .map_err(|_| {
+                anyhow!("GitHub request timeout after {REQUEST_TIMEOUT_SECS}s for {url}")
+            })?
+            .context("sending GitHub request")?;
         let status = response.status();
         if status == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(entry) = etag_cache.get(url) {
@@ -566,7 +574,23 @@ async fn get_cached_body(
                     })
                     .unwrap_or(fallback_delay);
                 if !delay.is_zero() {
+                    let remaining_backoff = Duration::from_secs(RATE_LIMIT_BACKOFF_TOTAL_MAX_SECS)
+                        .saturating_sub(total_backoff);
+                    if remaining_backoff.is_zero() {
+                        return Err(anyhow!(
+                            "GitHub API rate limit timeout for {url} after {}s of backoff",
+                            RATE_LIMIT_BACKOFF_TOTAL_MAX_SECS
+                        ));
+                    }
+                    if delay > remaining_backoff {
+                        tokio::time::sleep(remaining_backoff).await;
+                        return Err(anyhow!(
+                            "GitHub API rate limit timeout for {url} after {}s of backoff",
+                            RATE_LIMIT_BACKOFF_TOTAL_MAX_SECS
+                        ));
+                    }
                     tokio::time::sleep(delay).await;
+                    total_backoff += delay;
                 }
                 continue;
             }
