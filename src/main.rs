@@ -468,7 +468,7 @@ impl App {
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
+    fn view_app_card<'a>(&self, app: &'a Application) -> Element<'a, Message> {
         let icon_char = app
             .name
             .chars()
