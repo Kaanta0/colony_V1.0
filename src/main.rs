@@ -7,6 +7,7 @@ use iced::widget::{
 };
 use iced::{color, Element, Fill, Font, Length, Task, Theme};
 use std::path::Path;
+use std::time::Duration;
 
 use scan::Application;
 use sections::Section;
@@ -127,6 +128,7 @@ enum Message {
     SectionSelected(usize),
     Rescan,
     LaunchApp(String),
+    ClearStatus,
     FontLoaded(Result<(), font::Error>),
 }
 
@@ -139,11 +141,13 @@ impl App {
         match message {
             Message::SearchChanged(query) => {
                 self.search_query = query;
+                Task::none()
             }
             Message::SectionSelected(index) => {
                 if index < self.sections.len() {
                     self.selected_section = index;
                 }
+                Task::none()
             }
             Message::Rescan => {
                 match scan::scan_applications() {
@@ -155,35 +159,65 @@ impl App {
                         self.status_message = format!("Error: {e}");
                     }
                 }
+                Task::none()
             }
             Message::LaunchApp(exec) => {
-                self.status_message = format!("Launching...");
+                let launch_result = {
+                    #[cfg(windows)]
+                    {
+                        // On Windows, use cmd /C start to launch
+                        std::process::Command::new("cmd")
+                            .args(["/C", "start", "", &exec])
+                            .spawn()
+                            .map(|_| ())
+                            .map_err(|error| format!("Impossible de lancer: {error}"))
+                    }
 
-                #[cfg(windows)]
-                {
-                    // On Windows, use cmd /C start to launch
-                    let _ = std::process::Command::new("cmd")
-                        .args(["/C", "start", "", &exec])
-                        .spawn();
-                }
-
-                #[cfg(not(windows))]
-                {
-                    // On Linux/macOS, parse and execute
-                    if let Ok(mut parts) = shell_words::split(&exec) {
-                        parts.retain(|part| !part.is_empty());
-                        if let Some((cmd, args)) = parts.split_first() {
-                            let _ = std::process::Command::new(cmd)
-                                .args(args)
-                                .spawn();
+                    #[cfg(not(windows))]
+                    {
+                        // On Linux/macOS, parse and execute
+                        match shell_words::split(&exec) {
+                            Ok(mut parts) => {
+                                parts.retain(|part| !part.is_empty());
+                                if let Some((cmd, args)) = parts.split_first() {
+                                    std::process::Command::new(cmd)
+                                        .args(args)
+                                        .spawn()
+                                        .map(|_| ())
+                                        .map_err(|error| {
+                                            format!("Impossible de lancer: {error}")
+                                        })
+                                } else {
+                                    Err("Impossible de lancer: commande vide".to_string())
+                                }
+                            }
+                            Err(error) => Err(format!("Impossible de lancer: {error}")),
                         }
                     }
-                }
-            }
-            Message::FontLoaded(_) => {}
-        }
+                };
 
-        Task::none()
+                match launch_result {
+                    Ok(()) => {
+                        self.status_message = "Application lancée.".to_string();
+                        return Task::perform(
+                            async {
+                                std::thread::sleep(Duration::from_secs(4));
+                            },
+                            |_| Message::ClearStatus,
+                        );
+                    }
+                    Err(message) => {
+                        self.status_message = message;
+                    }
+                }
+                Task::none()
+            }
+            Message::ClearStatus => {
+                self.status_message = format!("{} applications found", self.applications.len());
+                Task::none()
+            }
+            Message::FontLoaded(_) => Task::none(),
+        }
     }
 
     fn view(&self) -> Element<'_, Message> {
