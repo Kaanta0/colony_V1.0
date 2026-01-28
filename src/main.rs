@@ -47,16 +47,16 @@ impl Category {
 
     fn icon(&self) -> &'static str {
         match self {
-            Category::All => "🧭",
-            Category::Development => "💻",
-            Category::Graphics => "🎨",
-            Category::Network => "🌐",
-            Category::Office => "📄",
-            Category::Multimedia => "🎬",
-            Category::System => "⚙️",
-            Category::Utility => "🧰",
-            Category::Game => "🎮",
-            Category::Other => "📦",
+            Category::All => "*",
+            Category::Development => "</>",
+            Category::Graphics => "~",
+            Category::Network => "@",
+            Category::Office => "#",
+            Category::Multimedia => ">",
+            Category::System => "$",
+            Category::Utility => "%",
+            Category::Game => "^",
+            Category::Other => "?",
         }
     }
 
@@ -200,46 +200,18 @@ impl App {
             .collect();
 
         let category_list = Column::with_children(category_buttons).spacing(4);
-        let category_section = column![
-            text("Catégories").size(12).color(color!(0x888899)),
-            container(text("")).height(6),
-            container(text(""))
-                .height(1)
-                .width(Fill)
-                .style(|_theme| container::Style {
-                    background: Some(color!(0x2a2a4e).into()),
-                    ..Default::default()
-                }),
-            container(text("")).height(6),
-            category_list,
-        ]
-        .spacing(0);
 
         let rescan_btn = button(text("Rescan").size(14))
             .on_press(Message::Rescan)
             .padding([8, 16])
             .width(Fill);
-        let action_section = column![
-            text("Actions").size(12).color(color!(0x888899)),
-            container(text("")).height(6),
-            container(text(""))
-                .height(1)
-                .width(Fill)
-                .style(|_theme| container::Style {
-                    background: Some(color!(0x2a2a4e).into()),
-                    ..Default::default()
-                }),
-            container(text("")).height(10),
-            rescan_btn,
-        ]
-        .spacing(0);
 
         let sidebar_content = column![
             title,
             container(text("")).height(24),
-            category_section,
+            category_list,
             container(text("")).height(Length::Fill),
-            action_section,
+            rescan_btn,
         ]
         .spacing(8)
         .padding(16)
@@ -256,53 +228,17 @@ impl App {
 
     fn view_category_button(&self, category: Category) -> Element<'_, Message> {
         let is_selected = self.selected_category == category;
-        let app_count = self.category_count(&category);
-
-        let indicator = container(text(""))
-            .width(4)
-            .height(Length::Fill)
-            .style(move |_theme| container::Style {
-                background: Some(
-                    if is_selected {
-                        color!(0x6f6bff)
-                    } else {
-                        iced::Color::TRANSPARENT
-                    }
-                    .into(),
-                ),
-                ..Default::default()
-            });
 
         let label = text(format!("{} {}", category.icon(), category.label())).size(14);
-        let count_badge = container(
-            text(app_count.to_string())
-                .size(12)
-                .color(color!(0xe6e6ff)),
-        )
-        .padding([2, 8])
-        .style(|_theme| container::Style {
-            background: Some(color!(0x2f2f55).into()),
-            border: iced::Border::default().rounded(12),
-            ..Default::default()
-        });
 
-        let content = row![
-            indicator,
-            container(label).padding([0, 8, 0, 10]),
-            container(text("")).width(Length::Fill),
-            count_badge,
-        ]
-        .align_y(iced::Alignment::Center)
-        .spacing(6);
-
-        let btn = button(content)
+        let btn = button(label)
             .on_press(Message::CategorySelected(category))
-            .padding([8, 8])
+            .padding([10, 14])
             .width(Fill)
             .style(move |theme, status| {
                 if is_selected {
                     button::Style {
-                        background: Some(color!(0x2e2e52).into()),
+                        background: Some(color!(0x3a3a5e).into()),
                         text_color: color!(0xffffff),
                         border: iced::Border::default().rounded(6),
                         ..button::primary(theme, status)
@@ -318,13 +254,6 @@ impl App {
             });
 
         btn.into()
-    }
-
-    fn category_count(&self, category: &Category) -> usize {
-        self.applications
-            .iter()
-            .filter(|app| category.matches(&app.category))
-            .count()
     }
 
     fn view_content(&self) -> Element<'_, Message> {
