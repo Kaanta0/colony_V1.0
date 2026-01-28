@@ -490,20 +490,18 @@ async fn get_cached_body(
         request = request.header(IF_NONE_MATCH, entry.etag.clone());
     }
     let response = request.send().await.context("sending GitHub request")?;
-    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_MODIFIED {
         if let Some(entry) = etag_cache.get(url) {
             return Ok(CachedBody::Body(entry.body.clone()));
         }
         return Err(anyhow!("received 304 without a cached body for {}", url));
     }
-    if response.status() == reqwest::StatusCode::NOT_FOUND {
+    if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(CachedBody::NotFound);
     }
-    let response = response
-        .error_for_status()
-        .with_context(|| format!("GitHub API returned an error status for {}", url))?;
-    let etag = response
-        .headers()
+    let headers = response.headers().clone();
+    let etag = headers
         .get(ETAG)
         .and_then(|value| value.to_str().ok())
         .map(|value| value.to_string());
@@ -511,6 +509,19 @@ async fn get_cached_body(
         .text()
         .await
         .with_context(|| format!("reading response body for {}", url))?;
+    if !status.is_success() {
+        let rate_limit_remaining = headers
+            .get("X-RateLimit-Remaining")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("unknown");
+        let rate_limit_reset = headers
+            .get("X-RateLimit-Reset")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("unknown");
+        return Err(anyhow!(
+            "GitHub API error for {url}: status={status}, rate_limit_remaining={rate_limit_remaining}, rate_limit_reset={rate_limit_reset}, body={body}"
+        ));
+    }
     if let Some(etag) = etag {
         etag_cache.update(url, etag, body.clone());
     }
