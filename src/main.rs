@@ -1,4 +1,5 @@
 mod github;
+mod manifest;
 mod scan;
 mod sections;
 

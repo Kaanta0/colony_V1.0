@@ -8,6 +8,7 @@ Ce dossier centralise la documentation du projet Colony (architecture, configura
 - Convention de configuration (structure, schémas, exemples).
 - Décisions techniques majeures (ADR ou notes).
 - Guides d’intégration d’applications.
+- Schéma de manifestes Colony et exemples JSON.
 
 ## Priorités techniques
 
@@ -49,3 +50,8 @@ unix = [
 ## À maintenir
 
 Ce fichier doit être mis à jour à chaque évolution majeure afin de garder une vision claire et fiable du projet.
+
+## Manifeste Colony
+
+Le fichier `colony.json` décrit une application Colony (identité, plateformes compatibles, téléchargements). Le
+schéma est défini par `src/manifest.rs` et un exemple complet est disponible dans `docs/manifest_example.json`.
