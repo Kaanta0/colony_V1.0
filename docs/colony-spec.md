@@ -41,4 +41,5 @@ Dépôt : `https://github.com/MotherSphere/orCAL`
 - Utiliser le cache HTTP (ETag / If-None-Match) pour limiter les appels GitHub.
 - Limiter la taille de la description (README) affichée dans Colony.
 - Prévoir des **fallbacks** si README ou langage indisponibles.
-
+- Gérer les limitations GitHub (403/429) en lisant `X-RateLimit-Remaining` et `X-RateLimit-Reset` :
+  - si `remaining` est à 0, attendre jusqu’au `reset` (ou appliquer un backoff exponentiel) puis relancer la requête.
