@@ -1,12 +1,11 @@
-mod github;
-mod manifest;
-mod metadata;
 mod scan;
 mod sections;
 
 use iced::font::{self, Weight};
-use iced::widget::{Column, Row, button, column, container, row, scrollable, text, text_input};
-use iced::{Element, Fill, Font, Length, Task, Theme, color};
+use iced::widget::{
+    button, column, container, row, scrollable, text, text_input, Column, Row,
+};
+use iced::{color, Element, Fill, Font, Length, Task, Theme};
 use std::path::Path;
 use std::time::Duration;
 
@@ -22,11 +21,11 @@ pub fn main() -> iced::Result {
         App::update,
         App::view,
     )
-    .title(App::title)
-    .theme(App::theme)
-    .default_font(default_font)
-    .window_size((1000.0, 700.0))
-    .run()
+        .title(App::title)
+        .theme(App::theme)
+        .default_font(default_font)
+        .window_size((1000.0, 700.0))
+        .run()
 }
 
 const APP_FONT_NAME: &str = "JetBrainsMono Nerd Font";
@@ -44,8 +43,8 @@ struct FontAssets {
 
 impl FontAssets {
     fn discover() -> Self {
-        let assets_dir =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
+        let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
         let mut bytes = Vec::new();
         let mut complete = true;
 
@@ -131,10 +130,7 @@ impl App {
             font,
         };
 
-        (
-            app,
-            Task::batch([font_assets.load_task(), github_scan_task()]),
-        )
+        (app, font_assets.load_task())
     }
 }
 
@@ -143,7 +139,6 @@ enum Message {
     SearchChanged(String),
     SectionSelected(usize),
     Rescan,
-    GithubScanFinished(Result<Vec<Application>, String>),
     LaunchApp(String),
     DummyAppSelected(usize),
     DummyAppBack,
@@ -172,27 +167,11 @@ impl App {
             Message::Rescan => {
                 match scan::scan_applications() {
                     Ok(apps) => {
+                        self.status_message = format!("{} applications found", apps.len());
                         self.applications = apps;
-                        self.status_message = format!(
-                            "{} applications found (GitHub scan in progress)",
-                            self.applications.len()
-                        );
                     }
                     Err(e) => {
                         self.status_message = format!("Error: {e}");
-                    }
-                }
-                github_scan_task()
-            }
-            Message::GithubScanFinished(result) => {
-                match result {
-                    Ok(apps) => {
-                        self.merge_applications(apps);
-                        self.status_message =
-                            format!("{} applications found", self.applications.len());
-                    }
-                    Err(error) => {
-                        self.status_message = format!("GitHub scan error: {error}");
                     }
                 }
                 Task::none()
@@ -211,27 +190,23 @@ impl App {
 
                     #[cfg(not(windows))]
                     {
-                        if is_url(&exec) {
-                            open_url(&exec)
-                        } else {
-                            // On Linux/macOS, parse and execute
-                            match shell_words::split(&exec) {
-                                Ok(mut parts) => {
-                                    parts.retain(|part| !part.is_empty());
-                                    if let Some((cmd, args)) = parts.split_first() {
-                                        std::process::Command::new(cmd)
-                                            .args(args)
-                                            .spawn()
-                                            .map(|_| ())
-                                            .map_err(|error| {
-                                                format!("Impossible de lancer: {error}")
-                                            })
-                                    } else {
-                                        Err("Impossible de lancer: commande vide".to_string())
-                                    }
+                        // On Linux/macOS, parse and execute
+                        match shell_words::split(&exec) {
+                            Ok(mut parts) => {
+                                parts.retain(|part| !part.is_empty());
+                                if let Some((cmd, args)) = parts.split_first() {
+                                    std::process::Command::new(cmd)
+                                        .args(args)
+                                        .spawn()
+                                        .map(|_| ())
+                                        .map_err(|error| {
+                                            format!("Impossible de lancer: {error}")
+                                        })
+                                } else {
+                                    Err("Impossible de lancer: commande vide".to_string())
                                 }
-                                Err(error) => Err(format!("Impossible de lancer: {error}")),
                             }
+                            Err(error) => Err(format!("Impossible de lancer: {error}")),
                         }
                     }
                 };
@@ -276,7 +251,10 @@ impl App {
 
         let main_layout = row![sidebar, content].spacing(0);
 
-        container(main_layout).width(Fill).height(Fill).into()
+        container(main_layout)
+            .width(Fill)
+            .height(Fill)
+            .into()
     }
 
     fn view_sidebar(&self) -> Element<'_, Message> {
@@ -412,10 +390,14 @@ impl App {
 
         let app_grid = self.view_app_grid();
 
-        let content = column![header, container(text("")).height(16), app_grid]
-            .spacing(8)
-            .padding(24)
-            .width(Fill);
+        let content = column![
+            header,
+            container(text("")).height(16),
+            app_grid
+        ]
+        .spacing(8)
+        .padding(24)
+        .width(Fill);
 
         container(content)
             .style(|_theme| container::Style {
@@ -468,15 +450,8 @@ impl App {
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_app_card<'a>(&self, app: &'a Application) -> Element<'a, Message> {
-        let icon_char = app
-            .name
-            .chars()
-            .next()
-            .unwrap_or('?')
-            .to_uppercase()
-            .next()
-            .unwrap_or('?');
+    fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
+        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
@@ -488,60 +463,20 @@ impl App {
             .font(self.app_font())
             .color(color!(0xffffff));
 
-        let update_label = app.update.as_ref().and_then(|update| {
-            if update.update_available {
-                Some(
-                    text(format!(
-                        "Mise à jour dispo: {} (local {})",
-                        update.latest_version,
-                        update.local_version.as_deref().unwrap_or("inconnue")
-                    ))
-                    .size(11)
-                    .font(self.app_font())
-                    .color(color!(0x6bff95)),
-                )
-            } else {
-                None
-            }
-        });
-        let description = app.description.as_ref().map(|description| {
-            text(description)
-                .size(11)
-                .font(self.app_font())
-                .color(color!(0x9a9ab5))
-        });
-        let language = app.language.as_ref().map(|language| {
-            text(format!("Langage: {}", language))
-                .size(10)
-                .font(self.app_font())
-                .color(color!(0x7a7a99))
-        });
-
-        let mut content_children: Vec<Element<'_, Message>> = Vec::new();
-        content_children.push(container(icon).width(Fill).center_x(Fill).into());
-        content_children.push(container(text("")).height(8).into());
-        content_children.push(
+        let card_content = column![
+            container(icon)
+                .width(Fill)
+                .center_x(Fill),
+            container(text("")).height(8),
             container(name)
                 .width(Fill)
                 .height(32)
                 .center_x(Fill)
-                .center_y(Fill)
-                .into(),
-        );
-        if let Some(description) = description {
-            content_children.push(container(description).width(Fill).center_x(Fill).into());
-        }
-        if let Some(language) = language {
-            content_children.push(container(language).width(Fill).center_x(Fill).into());
-        }
-        if let Some(label) = update_label {
-            content_children.push(container(label).width(Fill).center_x(Fill).into());
-        }
-
-        let card_content = Column::with_children(content_children)
-            .spacing(4)
-            .padding(16)
-            .width(Fill);
+                .center_y(Fill),
+        ]
+        .spacing(4)
+        .padding(16)
+        .width(Fill);
 
         let exec = app.exec.clone();
         button(card_content)
@@ -603,14 +538,7 @@ impl App {
     }
 
     fn view_dummy_card(&self, index: usize, app: &DummyApp) -> Element<'_, Message> {
-        let icon_char = app
-            .name
-            .chars()
-            .next()
-            .unwrap_or('?')
-            .to_uppercase()
-            .next()
-            .unwrap_or('?');
+        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
@@ -623,7 +551,9 @@ impl App {
             .color(color!(0xffffff));
 
         let card_content = column![
-            container(icon).width(Fill).center_x(Fill),
+            container(icon)
+                .width(Fill)
+                .center_x(Fill),
             container(text("")).height(8),
             container(name)
                 .width(Fill)
@@ -686,7 +616,8 @@ impl App {
             .center_x(Fill)
             .center_y(Fill);
 
-        let footer = row![container(text("")).width(Fill), language].align_y(iced::Alignment::End);
+        let footer = row![container(text("")).width(Fill), language]
+            .align_y(iced::Alignment::End);
 
         let detail = column![
             header,
@@ -794,58 +725,10 @@ impl App {
     }
 
     fn app_font_with_weight(&self, weight: Weight) -> Font {
-        Font {
-            weight,
-            ..self.font
-        }
+        Font { weight, ..self.font }
     }
 
     fn theme(&self) -> Theme {
         Theme::Dark
     }
-
-    fn merge_applications(&mut self, new_apps: Vec<Application>) {
-        let mut seen = self
-            .applications
-            .iter()
-            .map(|app| app.name.to_lowercase())
-            .collect::<std::collections::HashSet<_>>();
-        for app in new_apps {
-            let name = app.name.to_lowercase();
-            if seen.insert(name) {
-                self.applications.push(app);
-            }
-        }
-        self.applications
-            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    }
-}
-
-fn github_scan_task() -> Task<Message> {
-    Task::perform(
-        async {
-            github::scan_github_apps_with_runtime().map_err(|error| error.to_string())
-        },
-        Message::GithubScanFinished,
-    )
-}
-
-#[cfg(not(windows))]
-fn is_url(value: &str) -> bool {
-    let lower = value.to_lowercase();
-    lower.starts_with("http://") || lower.starts_with("https://")
-}
-
-#[cfg(not(windows))]
-fn open_url(url: &str) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let opener = "open";
-    #[cfg(not(target_os = "macos"))]
-    let opener = "xdg-open";
-
-    std::process::Command::new(opener)
-        .arg(url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("Impossible d'ouvrir l'URL: {error}"))
 }
