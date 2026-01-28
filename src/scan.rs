@@ -14,6 +14,15 @@ pub struct Application {
     pub icon: Option<String>,
     pub category: AppCategory,
     pub origin: AppOrigin,
+    pub update: Option<UpdateProposal>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateProposal {
+    pub local_version: Option<String>,
+    pub latest_version: String,
+    pub update_available: bool,
+    pub platform: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -88,11 +97,7 @@ fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!(
-                "[scan] Invalid config {}: {}",
-                path.display(),
-                error
-            );
+            eprintln!("[scan] Invalid config {}: {}", path.display(), error);
             return None;
         }
     };
@@ -149,11 +154,7 @@ fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!(
-                "[scan] Invalid config {}: {}",
-                path.display(),
-                error
-            );
+            eprintln!("[scan] Invalid config {}: {}", path.display(), error);
             return None;
         }
     };
@@ -218,11 +219,7 @@ fn load_colony_dirs_from_config() -> Option<Vec<PathBuf>> {
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!(
-                "[scan] Invalid config {}: {}",
-                path.display(),
-                error
-            );
+            eprintln!("[scan] Invalid config {}: {}", path.display(), error);
             return None;
         }
     };
@@ -243,7 +240,10 @@ fn default_colony_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
 
     if let Ok(home) = std::env::var("HOME") {
-        dirs.push(PathBuf::from(format!("{}/.local/share/colony/applications", home)));
+        dirs.push(PathBuf::from(format!(
+            "{}/.local/share/colony/applications",
+            home
+        )));
     }
 
     dirs
@@ -393,6 +393,7 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
         icon: None,
         category,
         origin: AppOrigin::Windows,
+        update: None,
     })
 }
 
@@ -407,6 +408,7 @@ fn parse_exe_file(path: &Path) -> Option<Application> {
         icon: None,
         category: AppCategory::Other,
         origin: AppOrigin::Windows,
+        update: None,
     })
 }
 
@@ -415,48 +417,75 @@ fn categorize_windows_app(name: &str, exec: &str) -> AppCategory {
     let lower_name = name.to_lowercase();
     let lower_exec = exec.to_lowercase();
 
-    if lower_name.contains("code") || lower_name.contains("studio")
-        || lower_name.contains("developer") || lower_exec.contains("ide")
-        || lower_name.contains("python") || lower_name.contains("node")
-        || lower_name.contains("git") || lower_name.contains("terminal")
+    if lower_name.contains("code")
+        || lower_name.contains("studio")
+        || lower_name.contains("developer")
+        || lower_exec.contains("ide")
+        || lower_name.contains("python")
+        || lower_name.contains("node")
+        || lower_name.contains("git")
+        || lower_name.contains("terminal")
     {
         AppCategory::Development
-    } else if lower_name.contains("photoshop") || lower_name.contains("gimp")
-        || lower_name.contains("paint") || lower_name.contains("photo")
-        || lower_name.contains("image") || lower_name.contains("draw")
+    } else if lower_name.contains("photoshop")
+        || lower_name.contains("gimp")
+        || lower_name.contains("paint")
+        || lower_name.contains("photo")
+        || lower_name.contains("image")
+        || lower_name.contains("draw")
     {
         AppCategory::Graphics
-    } else if lower_name.contains("chrome") || lower_name.contains("firefox")
-        || lower_name.contains("edge") || lower_name.contains("browser")
-        || lower_name.contains("mail") || lower_name.contains("outlook")
-        || lower_name.contains("teams") || lower_name.contains("slack")
-        || lower_name.contains("discord") || lower_name.contains("zoom")
+    } else if lower_name.contains("chrome")
+        || lower_name.contains("firefox")
+        || lower_name.contains("edge")
+        || lower_name.contains("browser")
+        || lower_name.contains("mail")
+        || lower_name.contains("outlook")
+        || lower_name.contains("teams")
+        || lower_name.contains("slack")
+        || lower_name.contains("discord")
+        || lower_name.contains("zoom")
     {
         AppCategory::Network
-    } else if lower_name.contains("word") || lower_name.contains("excel")
-        || lower_name.contains("powerpoint") || lower_name.contains("office")
-        || lower_name.contains("libre") || lower_name.contains("calc")
-        || lower_name.contains("writer") || lower_name.contains("document")
+    } else if lower_name.contains("word")
+        || lower_name.contains("excel")
+        || lower_name.contains("powerpoint")
+        || lower_name.contains("office")
+        || lower_name.contains("libre")
+        || lower_name.contains("calc")
+        || lower_name.contains("writer")
+        || lower_name.contains("document")
     {
         AppCategory::Office
-    } else if lower_name.contains("spotify") || lower_name.contains("vlc")
-        || lower_name.contains("media") || lower_name.contains("player")
-        || lower_name.contains("music") || lower_name.contains("video")
+    } else if lower_name.contains("spotify")
+        || lower_name.contains("vlc")
+        || lower_name.contains("media")
+        || lower_name.contains("player")
+        || lower_name.contains("music")
+        || lower_name.contains("video")
         || lower_name.contains("audio")
     {
         AppCategory::Multimedia
-    } else if lower_name.contains("settings") || lower_name.contains("control")
-        || lower_name.contains("system") || lower_name.contains("config")
-        || lower_name.contains("manager") || lower_name.contains("monitor")
+    } else if lower_name.contains("settings")
+        || lower_name.contains("control")
+        || lower_name.contains("system")
+        || lower_name.contains("config")
+        || lower_name.contains("manager")
+        || lower_name.contains("monitor")
     {
         AppCategory::System
-    } else if lower_name.contains("notepad") || lower_name.contains("calculator")
-        || lower_name.contains("util") || lower_name.contains("tool")
-        || lower_name.contains("7-zip") || lower_name.contains("winrar")
+    } else if lower_name.contains("notepad")
+        || lower_name.contains("calculator")
+        || lower_name.contains("util")
+        || lower_name.contains("tool")
+        || lower_name.contains("7-zip")
+        || lower_name.contains("winrar")
     {
         AppCategory::Utility
-    } else if lower_name.contains("game") || lower_name.contains("steam")
-        || lower_name.contains("epic") || lower_name.contains("play")
+    } else if lower_name.contains("game")
+        || lower_name.contains("steam")
+        || lower_name.contains("epic")
+        || lower_name.contains("play")
         || lower_exec.contains("game")
     {
         AppCategory::Game
@@ -535,6 +564,7 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         icon,
         category: categorize_linux_app(&categories),
         origin,
+        update: None,
     })
 }
 
@@ -544,17 +574,35 @@ fn categorize_linux_app(categories: &str) -> AppCategory {
 
     if cats.iter().any(|c| matches!(*c, "Development" | "IDE")) {
         AppCategory::Development
-    } else if cats.iter().any(|c| matches!(*c, "Graphics" | "Photography" | "2DGraphics" | "3DGraphics")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "Graphics" | "Photography" | "2DGraphics" | "3DGraphics"))
+    {
         AppCategory::Graphics
-    } else if cats.iter().any(|c| matches!(*c, "Network" | "WebBrowser" | "Email" | "Chat")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "Network" | "WebBrowser" | "Email" | "Chat"))
+    {
         AppCategory::Network
-    } else if cats.iter().any(|c| matches!(*c, "Office" | "WordProcessor" | "Spreadsheet")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "Office" | "WordProcessor" | "Spreadsheet"))
+    {
         AppCategory::Office
-    } else if cats.iter().any(|c| matches!(*c, "AudioVideo" | "Audio" | "Video" | "Player")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "AudioVideo" | "Audio" | "Video" | "Player"))
+    {
         AppCategory::Multimedia
-    } else if cats.iter().any(|c| matches!(*c, "System" | "Settings" | "Monitor")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "System" | "Settings" | "Monitor"))
+    {
         AppCategory::System
-    } else if cats.iter().any(|c| matches!(*c, "Utility" | "FileManager" | "Archiving")) {
+    } else if cats
+        .iter()
+        .any(|c| matches!(*c, "Utility" | "FileManager" | "Archiving"))
+    {
         AppCategory::Utility
     } else if cats.iter().any(|c| matches!(*c, "Game")) {
         AppCategory::Game

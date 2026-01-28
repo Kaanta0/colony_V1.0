@@ -10,4 +10,5 @@ reqwest = { version = "0.12.23", default-features = false, features = ["json", "
 shell-words = "1.1.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+semver = "1.0.27"
 toml = "0.9.11"

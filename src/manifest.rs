@@ -18,8 +18,8 @@ pub struct ColonyAppManifest {
 }
 
 pub fn parse_manifest(contents: &str) -> Result<ColonyAppManifest> {
-    let manifest: ColonyManifest = serde_json::from_str(contents)
-        .context("decoding colony.json manifest")?;
+    let manifest: ColonyManifest =
+        serde_json::from_str(contents).context("decoding colony.json manifest")?;
     manifest
         .into_app_manifest()
         .context("colony.json missing required fields")
