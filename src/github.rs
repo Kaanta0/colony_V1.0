@@ -2,10 +2,12 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use semver::Version;
 use serde::Deserialize;
 
 use crate::manifest::{ColonyAppManifest, parse_manifest};
-use crate::scan::{AppCategory, AppOrigin, Application};
+use crate::metadata::load_local_metadata;
+use crate::scan::{AppCategory, AppOrigin, Application, UpdateProposal};
 
 const DEFAULT_GITHUB_USER: &str = "MotherSphere";
 const PER_PAGE: usize = 100;
@@ -29,16 +31,31 @@ struct GithubRepo {
 pub async fn scan_github_apps() -> Result<Vec<Application>> {
     let user = load_github_user();
     let repos = fetch_repos(&user).await?;
-    let apps = fetch_colony_manifests(&user, repos).await?
-        .into_iter()
-        .map(|manifest| Application {
+    let local_metadata = load_local_metadata();
+    let manifests = fetch_colony_manifests(&user, repos).await?;
+    let client = reqwest::Client::builder()
+        .user_agent("colony-launcher")
+        .build()
+        .context("creating GitHub client")?;
+    let mut apps = Vec::new();
+
+    for manifest in manifests {
+        let update = build_update_proposal(
+            &client,
+            &user,
+            &manifest,
+            local_metadata.get(&manifest.repo_name.to_lowercase()),
+        )
+        .await;
+        apps.push(Application {
             name: manifest.name,
             exec: manifest.repo_url,
             icon: None,
             category: AppCategory::Development,
             origin: AppOrigin::External,
-        })
-        .collect();
+            update,
+        });
+    }
     Ok(apps)
 }
 
@@ -51,11 +68,7 @@ fn load_github_user() -> String {
     let config: ColonyConfig = match toml::from_str(&contents) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!(
-                "[github] Invalid config {}: {}",
-                path.display(),
-                error
-            );
+            eprintln!("[github] Invalid config {}: {}", path.display(), error);
             return DEFAULT_GITHUB_USER.to_string();
         }
     };
@@ -107,12 +120,30 @@ async fn fetch_repos(user: &str) -> Result<Vec<GithubRepo>> {
 #[derive(Debug, Clone)]
 struct ColonyRepoManifest {
     name: String,
+    repo_name: String,
     platforms: Vec<String>,
     release_files: Vec<String>,
     repo_url: String,
 }
 
-async fn fetch_colony_manifests(user: &str, repos: Vec<GithubRepo>) -> Result<Vec<ColonyRepoManifest>> {
+#[derive(Debug, Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    #[serde(default)]
+    assets: Vec<GithubReleaseAsset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    #[serde(default)]
+    browser_download_url: String,
+}
+
+async fn fetch_colony_manifests(
+    user: &str,
+    repos: Vec<GithubRepo>,
+) -> Result<Vec<ColonyRepoManifest>> {
     let client = reqwest::Client::builder()
         .user_agent("colony-launcher")
         .build()
@@ -124,6 +155,7 @@ async fn fetch_colony_manifests(user: &str, repos: Vec<GithubRepo>) -> Result<Ve
         if let Some(manifest) = manifest {
             manifests.push(ColonyRepoManifest {
                 name: manifest.name,
+                repo_name: repo.name.clone(),
                 platforms: manifest.platforms,
                 release_files: manifest.release_files,
                 repo_url: repo.html_url,
@@ -132,6 +164,119 @@ async fn fetch_colony_manifests(user: &str, repos: Vec<GithubRepo>) -> Result<Ve
     }
 
     Ok(manifests)
+}
+
+async fn build_update_proposal(
+    client: &reqwest::Client,
+    user: &str,
+    manifest: &ColonyRepoManifest,
+    local_metadata: Option<&crate::metadata::LocalAppMetadata>,
+) -> Option<UpdateProposal> {
+    let platform = current_platform();
+    if !platform_supported(platform, &manifest.platforms) {
+        return None;
+    }
+    let latest_release =
+        fetch_latest_compatible_release(client, user, &manifest.repo_name, &manifest.release_files)
+            .await?;
+
+    let local_version = local_metadata.map(|metadata| metadata.version.clone());
+    let update_available = match local_version.as_deref() {
+        Some(version) => is_remote_newer(version, &latest_release.tag),
+        None => false,
+    };
+
+    Some(UpdateProposal {
+        local_version,
+        latest_version: latest_release.tag,
+        update_available,
+        platform: platform.to_string(),
+    })
+}
+
+fn platform_supported(platform: &str, platforms: &[String]) -> bool {
+    platforms.iter().any(|value| {
+        let value = value.trim().to_lowercase();
+        if platform == "windows" {
+            matches!(value.as_str(), "windows" | "win")
+        } else {
+            matches!(value.as_str(), "linux" | "unix")
+        }
+    })
+}
+
+fn current_platform() -> &'static str {
+    if cfg!(windows) { "windows" } else { "linux" }
+}
+
+fn is_remote_newer(local: &str, remote: &str) -> bool {
+    let local_version = parse_version(local);
+    let remote_version = parse_version(remote);
+    match (local_version, remote_version) {
+        (Some(local), Some(remote)) => remote > local,
+        _ => false,
+    }
+}
+
+fn parse_version(tag: &str) -> Option<Version> {
+    let trimmed = tag.trim().trim_start_matches('v');
+    Version::parse(trimmed).ok()
+}
+
+struct CompatibleRelease {
+    tag: String,
+    assets: Vec<GithubReleaseAsset>,
+}
+
+async fn fetch_latest_compatible_release(
+    client: &reqwest::Client,
+    user: &str,
+    repo: &str,
+    required_files: &[String],
+) -> Option<CompatibleRelease> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases?per_page={}",
+        user, repo, PER_PAGE
+    );
+    let response = client.get(url).send().await.ok()?.error_for_status().ok()?;
+    let releases: Vec<GithubRelease> = response.json().await.ok()?;
+
+    let mut best: Option<(Version, CompatibleRelease)> = None;
+
+    for release in releases {
+        let version = match parse_version(&release.tag_name) {
+            Some(version) => version,
+            None => continue,
+        };
+        if !release_has_required_assets(&release.assets, required_files) {
+            continue;
+        }
+
+        let candidate = CompatibleRelease {
+            tag: release.tag_name,
+            assets: release.assets,
+        };
+
+        match &best {
+            Some((best_version, _)) if &version <= best_version => {}
+            _ => best = Some((version, candidate)),
+        }
+    }
+
+    best.map(|(_, candidate)| candidate)
+}
+
+fn release_has_required_assets(assets: &[GithubReleaseAsset], required_files: &[String]) -> bool {
+    if required_files.is_empty() {
+        return false;
+    }
+
+    required_files.iter().all(|required| {
+        let required = required.trim().to_lowercase();
+        assets
+            .iter()
+            .any(|asset| asset.name.to_lowercase() == required)
+    })
 }
 
 async fn fetch_colony_manifest(
@@ -165,10 +310,7 @@ async fn fetch_colony_manifest(
     match parse_manifest(&contents) {
         Ok(manifest) => Ok(Some(manifest)),
         Err(error) => {
-            eprintln!(
-                "[github] Invalid colony.json for {}: {}",
-                repo.name, error
-            );
+            eprintln!("[github] Invalid colony.json for {}: {}", repo.name, error);
             Ok(None)
         }
     }

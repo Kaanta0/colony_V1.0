@@ -1,13 +1,12 @@
 mod github;
 mod manifest;
+mod metadata;
 mod scan;
 mod sections;
 
 use iced::font::{self, Weight};
-use iced::widget::{
-    button, column, container, row, scrollable, text, text_input, Column, Row,
-};
-use iced::{color, Element, Fill, Font, Length, Task, Theme};
+use iced::widget::{Column, Row, button, column, container, row, scrollable, text, text_input};
+use iced::{Element, Fill, Font, Length, Task, Theme, color};
 use std::path::Path;
 use std::time::Duration;
 
@@ -23,11 +22,11 @@ pub fn main() -> iced::Result {
         App::update,
         App::view,
     )
-        .title(App::title)
-        .theme(App::theme)
-        .default_font(default_font)
-        .window_size((1000.0, 700.0))
-        .run()
+    .title(App::title)
+    .theme(App::theme)
+    .default_font(default_font)
+    .window_size((1000.0, 700.0))
+    .run()
 }
 
 const APP_FONT_NAME: &str = "JetBrainsMono Nerd Font";
@@ -45,8 +44,8 @@ struct FontAssets {
 
 impl FontAssets {
     fn discover() -> Self {
-        let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
+        let assets_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui/assets/fonts/JetBrainsMonoNerdFont");
         let mut bytes = Vec::new();
         let mut complete = true;
 
@@ -174,8 +173,10 @@ impl App {
                 match scan::scan_applications() {
                     Ok(apps) => {
                         self.applications = apps;
-                        self.status_message =
-                            format!("{} applications found (GitHub scan in progress)", self.applications.len());
+                        self.status_message = format!(
+                            "{} applications found (GitHub scan in progress)",
+                            self.applications.len()
+                        );
                     }
                     Err(e) => {
                         self.status_message = format!("Error: {e}");
@@ -275,10 +276,7 @@ impl App {
 
         let main_layout = row![sidebar, content].spacing(0);
 
-        container(main_layout)
-            .width(Fill)
-            .height(Fill)
-            .into()
+        container(main_layout).width(Fill).height(Fill).into()
     }
 
     fn view_sidebar(&self) -> Element<'_, Message> {
@@ -414,14 +412,10 @@ impl App {
 
         let app_grid = self.view_app_grid();
 
-        let content = column![
-            header,
-            container(text("")).height(16),
-            app_grid
-        ]
-        .spacing(8)
-        .padding(24)
-        .width(Fill);
+        let content = column![header, container(text("")).height(16), app_grid]
+            .spacing(8)
+            .padding(24)
+            .width(Fill);
 
         container(content)
             .style(|_theme| container::Style {
@@ -475,7 +469,14 @@ impl App {
     }
 
     fn view_app_card(&self, app: &Application) -> Element<'_, Message> {
-        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
+        let icon_char = app
+            .name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .next()
+            .unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
@@ -487,20 +488,42 @@ impl App {
             .font(self.app_font())
             .color(color!(0xffffff));
 
-        let card_content = column![
-            container(icon)
-                .width(Fill)
-                .center_x(Fill),
-            container(text("")).height(8),
+        let update_label = app.update.as_ref().and_then(|update| {
+            if update.update_available {
+                Some(
+                    text(format!(
+                        "Mise à jour dispo: {} (local {})",
+                        update.latest_version,
+                        update.local_version.as_deref().unwrap_or("inconnue")
+                    ))
+                    .size(11)
+                    .font(self.app_font())
+                    .color(color!(0x6bff95)),
+                )
+            } else {
+                None
+            }
+        });
+
+        let mut content_children: Vec<Element<'_, Message>> = Vec::new();
+        content_children.push(container(icon).width(Fill).center_x(Fill).into());
+        content_children.push(container(text("")).height(8).into());
+        content_children.push(
             container(name)
                 .width(Fill)
                 .height(32)
                 .center_x(Fill)
-                .center_y(Fill),
-        ]
-        .spacing(4)
-        .padding(16)
-        .width(Fill);
+                .center_y(Fill)
+                .into(),
+        );
+        if let Some(label) = update_label {
+            content_children.push(container(label).width(Fill).center_x(Fill).into());
+        }
+
+        let card_content = Column::with_children(content_children)
+            .spacing(4)
+            .padding(16)
+            .width(Fill);
 
         let exec = app.exec.clone();
         button(card_content)
@@ -562,7 +585,14 @@ impl App {
     }
 
     fn view_dummy_card(&self, index: usize, app: &DummyApp) -> Element<'_, Message> {
-        let icon_char = app.name.chars().next().unwrap_or('?').to_uppercase().next().unwrap_or('?');
+        let icon_char = app
+            .name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .next()
+            .unwrap_or('?');
 
         let icon = text(icon_char.to_string())
             .size(32)
@@ -575,9 +605,7 @@ impl App {
             .color(color!(0xffffff));
 
         let card_content = column![
-            container(icon)
-                .width(Fill)
-                .center_x(Fill),
+            container(icon).width(Fill).center_x(Fill),
             container(text("")).height(8),
             container(name)
                 .width(Fill)
@@ -640,8 +668,7 @@ impl App {
             .center_x(Fill)
             .center_y(Fill);
 
-        let footer = row![container(text("")).width(Fill), language]
-            .align_y(iced::Alignment::End);
+        let footer = row![container(text("")).width(Fill), language].align_y(iced::Alignment::End);
 
         let detail = column![
             header,
@@ -749,7 +776,10 @@ impl App {
     }
 
     fn app_font_with_weight(&self, weight: Weight) -> Font {
-        Font { weight, ..self.font }
+        Font {
+            weight,
+            ..self.font
+        }
     }
 
     fn theme(&self) -> Theme {
