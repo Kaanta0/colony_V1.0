@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::header::{ETAG, IF_NONE_MATCH};
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::manifest::{ColonyAppManifest, parse_manifest};
 use crate::metadata::load_local_metadata;
-use crate::paths;
 use crate::scan::{AppCategory, AppOrigin, Application, UpdateProposal};
 
 const DEFAULT_GITHUB_USER: &str = "MotherSphere";
@@ -90,9 +89,10 @@ pub fn scan_github_apps_with_runtime() -> Result<Vec<Application>> {
 }
 
 fn load_github_user() -> String {
-    let (path, contents) = match paths::load_colony_config() {
-        Some(result) => result,
-        None => return DEFAULT_GITHUB_USER.to_string(),
+    let path = Path::new("config/colony.toml");
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(_) => return DEFAULT_GITHUB_USER.to_string(),
     };
     let config: ColonyConfig = match toml::from_str(&contents) {
         Ok(config) => config,
@@ -468,11 +468,7 @@ impl GithubEtagCache {
 }
 
 fn cache_path() -> PathBuf {
-    let primary = paths::colony_cache_path();
-    if primary.exists() || !paths::legacy_cache_path().exists() {
-        return primary;
-    }
-    paths::legacy_cache_path()
+    Path::new("config").join("github_etag_cache.json")
 }
 
 enum CachedBody {
@@ -515,16 +511,15 @@ async fn get_cached_body(
         .with_context(|| format!("reading response body for {}", url))?;
     if !status.is_success() {
         let rate_limit_remaining = headers
-            .get("x-ratelimit-remaining")
+            .get("X-RateLimit-Remaining")
             .and_then(|value| value.to_str().ok())
             .unwrap_or("unknown");
         let rate_limit_reset = headers
-            .get("x-ratelimit-reset")
+            .get("X-RateLimit-Reset")
             .and_then(|value| value.to_str().ok())
             .unwrap_or("unknown");
         return Err(anyhow!(
-            "GitHub API error for {url}: status={status}, rate_limit_remaining={rate_limit_remaining}, rate_limit_reset={rate_limit_reset}, body={}",
-            body.trim()
+            "GitHub API error for {url}: status={status}, rate_limit_remaining={rate_limit_remaining}, rate_limit_reset={rate_limit_reset}, body={body}"
         ));
     }
     if let Some(etag) = etag {

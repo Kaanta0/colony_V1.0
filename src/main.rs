@@ -1,7 +1,6 @@
 mod github;
 mod manifest;
 mod metadata;
-mod paths;
 mod scan;
 mod sections;
 
@@ -824,7 +823,9 @@ impl App {
 
 fn github_scan_task() -> Task<Message> {
     Task::perform(
-        async { github::scan_github_apps_with_runtime().map_err(|error| format!("{error:#}")) },
+        async {
+            github::scan_github_apps_with_runtime().map_err(|error| error.to_string())
+        },
         Message::GithubScanFinished,
     )
 }

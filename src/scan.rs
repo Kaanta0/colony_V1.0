@@ -7,8 +7,6 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::paths;
-
 #[derive(Debug, Clone)]
 pub struct Application {
     pub name: String,
@@ -96,7 +94,8 @@ fn get_application_dirs() -> Vec<PathBuf> {
 
 #[cfg(windows)]
 fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
-    let (path, content) = paths::load_colony_config()?;
+    let path = Path::new("config/colony.toml");
+    let content = fs::read_to_string(path).ok()?;
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
@@ -152,7 +151,8 @@ fn get_application_dirs() -> Vec<PathBuf> {
 
 #[cfg(not(windows))]
 fn load_scan_dirs_from_config() -> Option<Vec<PathBuf>> {
-    let (path, content) = paths::load_colony_config()?;
+    let path = Path::new("config/colony.toml");
+    let content = fs::read_to_string(path).ok()?;
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
@@ -216,7 +216,8 @@ fn colony_application_dirs() -> Vec<PathBuf> {
 
 #[cfg(not(windows))]
 fn load_colony_dirs_from_config() -> Option<Vec<PathBuf>> {
-    let (path, content) = paths::load_colony_config()?;
+    let path = Path::new("config/colony.toml");
+    let content = fs::read_to_string(path).ok()?;
     let config: ColonyConfig = match toml::from_str(&content) {
         Ok(config) => config,
         Err(error) => {
