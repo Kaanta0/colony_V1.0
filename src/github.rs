@@ -3,11 +3,11 @@ use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, USER_AGENT};
 use reqwest::StatusCode;
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
 
-pub const GITHUB_ORG: &str = "MotherSphere";
+const GITHUB_ORG: &str = "MotherSphere";
 const CACHE_PATH: &str = "config/cache/mothersphere.json";
 const CACHE_TTL: Duration = Duration::from_secs(30 * 60);
 
@@ -55,7 +55,7 @@ pub async fn scan_mothersphere_colony_software() -> Result<Vec<ColonySoftware>> 
     Ok(colonies)
 }
 
-pub fn github_client() -> Result<reqwest::Client> {
+fn github_client() -> Result<reqwest::Client> {
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static("colony-launcher"));
     headers.insert(
@@ -141,7 +141,9 @@ fn load_cache() -> Result<Option<Vec<ColonySoftware>>> {
     let path = Path::new(CACHE_PATH);
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(None)
+        }
         Err(error) => return Err(error).context("Failed to read GitHub cache"),
     };
 
