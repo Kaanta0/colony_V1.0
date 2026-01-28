@@ -23,6 +23,7 @@ enum OriginFilter {
     Any,
     WindowsOnly,
     NonWindows,
+    LinuxOnly,
 }
 
 impl SectionFilter {
@@ -36,6 +37,11 @@ impl SectionFilter {
             }
             OriginFilter::NonWindows => {
                 if app.origin == AppOrigin::Windows {
+                    return false;
+                }
+            }
+            OriginFilter::LinuxOnly => {
+                if app.origin != AppOrigin::Linux {
                     return false;
                 }
             }
@@ -103,6 +109,7 @@ fn parse_origin(origin: Option<&str>) -> OriginFilter {
         Some(value) if value == "non_windows" || value == "nonwindows" || value == "colony" => {
             OriginFilter::NonWindows
         }
+        Some(value) if value == "linux" || value == "linux_only" => OriginFilter::LinuxOnly,
         Some(value) if value == "any" || value == "all" => OriginFilter::Any,
         Some(value) => {
             eprintln!("[sections] Unknown origin filter '{value}', defaulting to 'any'.");
@@ -149,6 +156,14 @@ fn default_sections() -> Vec<Section> {
             icon: "\u{f17a}".to_string(),
             filter: SectionFilter {
                 origin: OriginFilter::WindowsOnly,
+                category: None,
+            },
+        },
+        Section {
+            name: "Linux".to_string(),
+            icon: "\u{f17c}".to_string(),
+            filter: SectionFilter {
+                origin: OriginFilter::LinuxOnly,
                 category: None,
             },
         },

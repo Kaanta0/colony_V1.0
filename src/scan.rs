@@ -32,6 +32,7 @@ pub enum AppOrigin {
     Windows,
     Colony,
     External,
+    Linux,
 }
 
 #[derive(Debug, Deserialize)]
@@ -469,7 +470,7 @@ fn parse_desktop_file(path: &Path) -> Result<Application> {
         exec,
         icon,
         category: categorize_linux_app(&categories),
-        origin: AppOrigin::Colony,
+        origin: AppOrigin::Linux,
     })
 }
 
