@@ -12,6 +12,12 @@ pub struct Section {
     pub filter: SectionFilter,
 }
 
+impl Section {
+    pub fn is_development(&self) -> bool {
+        self.filter.category == Some(AppCategory::Development)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SectionFilter {
     origin: OriginFilter,
