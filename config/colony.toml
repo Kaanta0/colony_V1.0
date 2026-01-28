@@ -19,3 +19,6 @@ unix = [
 colony = [
   "${HOME}/.local/share/colony/applications",
 ]
+
+[github]
+user = "MotherSphere"

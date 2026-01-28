@@ -1,3 +1,4 @@
+mod github;
 mod scan;
 mod sections;
 
@@ -130,7 +131,10 @@ impl App {
             font,
         };
 
-        (app, font_assets.load_task())
+        (
+            app,
+            Task::batch([font_assets.load_task(), github_scan_task()]),
+        )
     }
 }
 
@@ -139,6 +143,7 @@ enum Message {
     SearchChanged(String),
     SectionSelected(usize),
     Rescan,
+    GithubScanFinished(Result<Vec<Application>, String>),
     LaunchApp(String),
     DummyAppSelected(usize),
     DummyAppBack,
@@ -167,11 +172,25 @@ impl App {
             Message::Rescan => {
                 match scan::scan_applications() {
                     Ok(apps) => {
-                        self.status_message = format!("{} applications found", apps.len());
                         self.applications = apps;
+                        self.status_message =
+                            format!("{} applications found (GitHub scan in progress)", self.applications.len());
                     }
                     Err(e) => {
                         self.status_message = format!("Error: {e}");
+                    }
+                }
+                github_scan_task()
+            }
+            Message::GithubScanFinished(result) => {
+                match result {
+                    Ok(apps) => {
+                        self.merge_applications(apps);
+                        self.status_message =
+                            format!("{} applications found", self.applications.len());
+                    }
+                    Err(error) => {
+                        self.status_message = format!("GitHub scan error: {error}");
                     }
                 }
                 Task::none()
@@ -190,23 +209,27 @@ impl App {
 
                     #[cfg(not(windows))]
                     {
-                        // On Linux/macOS, parse and execute
-                        match shell_words::split(&exec) {
-                            Ok(mut parts) => {
-                                parts.retain(|part| !part.is_empty());
-                                if let Some((cmd, args)) = parts.split_first() {
-                                    std::process::Command::new(cmd)
-                                        .args(args)
-                                        .spawn()
-                                        .map(|_| ())
-                                        .map_err(|error| {
-                                            format!("Impossible de lancer: {error}")
-                                        })
-                                } else {
-                                    Err("Impossible de lancer: commande vide".to_string())
+                        if is_url(&exec) {
+                            open_url(&exec)
+                        } else {
+                            // On Linux/macOS, parse and execute
+                            match shell_words::split(&exec) {
+                                Ok(mut parts) => {
+                                    parts.retain(|part| !part.is_empty());
+                                    if let Some((cmd, args)) = parts.split_first() {
+                                        std::process::Command::new(cmd)
+                                            .args(args)
+                                            .spawn()
+                                            .map(|_| ())
+                                            .map_err(|error| {
+                                                format!("Impossible de lancer: {error}")
+                                            })
+                                    } else {
+                                        Err("Impossible de lancer: commande vide".to_string())
+                                    }
                                 }
+                                Err(error) => Err(format!("Impossible de lancer: {error}")),
                             }
-                            Err(error) => Err(format!("Impossible de lancer: {error}")),
                         }
                     }
                 };
@@ -731,4 +754,51 @@ impl App {
     fn theme(&self) -> Theme {
         Theme::Dark
     }
+
+    fn merge_applications(&mut self, new_apps: Vec<Application>) {
+        let mut seen = self
+            .applications
+            .iter()
+            .map(|app| app.name.to_lowercase())
+            .collect::<std::collections::HashSet<_>>();
+        for app in new_apps {
+            let name = app.name.to_lowercase();
+            if seen.insert(name) {
+                self.applications.push(app);
+            }
+        }
+        self.applications
+            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    }
+}
+
+fn github_scan_task() -> Task<Message> {
+    Task::perform(
+        async {
+            github::scan_github_apps()
+                .await
+                .map_err(|error| error.to_string())
+        },
+        Message::GithubScanFinished,
+    )
+}
+
+#[cfg(not(windows))]
+fn is_url(value: &str) -> bool {
+    let lower = value.to_lowercase();
+    lower.starts_with("http://") || lower.starts_with("https://")
+}
+
+#[cfg(not(windows))]
+fn open_url(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(target_os = "macos"))]
+    let opener = "xdg-open";
+
+    std::process::Command::new(opener)
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Impossible d'ouvrir l'URL: {error}"))
 }
