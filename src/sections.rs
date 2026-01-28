@@ -83,59 +83,24 @@ pub fn load_sections() -> Vec<Section> {
     match fs::read_to_string(path) {
         Ok(contents) => match serde_json::from_str::<Vec<SectionConfig>>(&contents) {
             Ok(configs) => {
-                let sections: Vec<Section> =
-                    configs.into_iter().map(SectionConfig::into_section).collect();
+                let sections: Vec<Section> = configs.into_iter().map(SectionConfig::into_section).collect();
                 if sections.is_empty() {
                     eprintln!("[sections] Config loaded but no sections found, using defaults.");
-                    apply_platform_filter(default_sections())
+                    default_sections()
                 } else {
-                    apply_platform_filter(sections)
+                    sections
                 }
             }
             Err(error) => {
                 eprintln!("[sections] Failed to parse {:?}: {error}", path);
-                apply_platform_filter(default_sections())
+                default_sections()
             }
         },
         Err(error) => {
             eprintln!("[sections] Failed to read {:?}: {error}", path);
-            apply_platform_filter(default_sections())
+            default_sections()
         }
     }
-}
-
-fn apply_platform_filter(mut sections: Vec<Section>) -> Vec<Section> {
-    if cfg!(windows) {
-        for section in &mut sections {
-            if section.name.eq_ignore_ascii_case("all")
-                && matches!(
-                    section.filter.origin,
-                    OriginFilter::NonWindows | OriginFilter::LinuxOnly
-                )
-            {
-                section.filter.origin = OriginFilter::WindowsOnly;
-            }
-        }
-
-        sections.retain(|section| {
-            matches!(
-                section.filter.origin,
-                OriginFilter::WindowsOnly | OriginFilter::Any
-            )
-        });
-    } else {
-        for section in &mut sections {
-            if section.name.eq_ignore_ascii_case("all")
-                && matches!(section.filter.origin, OriginFilter::WindowsOnly)
-            {
-                section.filter.origin = OriginFilter::NonWindows;
-            }
-        }
-
-        sections.retain(|section| !matches!(section.filter.origin, OriginFilter::WindowsOnly));
-    }
-
-    sections
 }
 
 fn parse_origin(origin: Option<&str>) -> OriginFilter {
