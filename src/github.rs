@@ -436,12 +436,8 @@ struct GithubEtagCache {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CacheEntry {
-    #[serde(default)]
-    etag: Option<String>,
-    #[serde(default)]
-    body: Option<String>,
-    #[serde(default)]
-    not_found: bool,
+    etag: String,
+    body: String,
 }
 
 impl GithubEtagCache {
@@ -471,29 +467,7 @@ impl GithubEtagCache {
     }
 
     fn update(&mut self, url: &str, etag: String, body: String) {
-        self.entries.insert(
-            url.to_string(),
-            CacheEntry {
-                etag: Some(etag),
-                body: Some(body),
-                not_found: false,
-            },
-        );
-    }
-
-    fn update_not_found(&mut self, url: &str) {
-        self.entries.insert(
-            url.to_string(),
-            CacheEntry {
-                etag: None,
-                body: None,
-                not_found: true,
-            },
-        );
-    }
-
-    fn clear(&mut self, url: &str) {
-        self.entries.remove(url);
+        self.entries.insert(url.to_string(), CacheEntry { etag, body });
     }
 }
 
@@ -518,25 +492,17 @@ async fn get_cached_body(
             request = request.header("Accept", accept);
         }
         if let Some(entry) = etag_cache.get(url) {
-            if entry.not_found {
-                return Ok(CachedBody::NotFound);
-            }
-            if let Some(etag) = entry.etag.as_ref() {
-                request = request.header(IF_NONE_MATCH, etag.clone());
-            }
+            request = request.header(IF_NONE_MATCH, entry.etag.clone());
         }
         let response = request.send().await.context("sending GitHub request")?;
         let status = response.status();
         if status == reqwest::StatusCode::NOT_MODIFIED {
             if let Some(entry) = etag_cache.get(url) {
-                if let Some(body) = entry.body.as_ref() {
-                    return Ok(CachedBody::Body(body.clone()));
-                }
+                return Ok(CachedBody::Body(entry.body.clone()));
             }
             return Err(anyhow!("received 304 without a cached body for {}", url));
         }
         if status == reqwest::StatusCode::NOT_FOUND {
-            etag_cache.update_not_found(url);
             return Ok(CachedBody::NotFound);
         }
         let headers = response.headers().clone();
@@ -593,8 +559,6 @@ async fn get_cached_body(
         }
         if let Some(etag) = etag {
             etag_cache.update(url, etag, body.clone());
-        } else {
-            etag_cache.clear(url);
         }
         return Ok(CachedBody::Body(body));
     }
