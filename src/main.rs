@@ -10,7 +10,7 @@ use iced::{Element, Fill, Font, Length, Task, Theme, color};
 use std::path::Path;
 use std::time::Duration;
 
-use scan::{AppOrigin, Application};
+use scan::Application;
 use sections::Section;
 
 pub fn main() -> iced::Result {
@@ -96,7 +96,6 @@ struct App {
     selected_section: usize,
     status_message: String,
     active_dummy_app: Option<usize>,
-    active_app: Option<usize>,
     font: Font,
 }
 
@@ -129,7 +128,6 @@ impl App {
             selected_section: 0,
             status_message,
             active_dummy_app: None,
-            active_app: None,
             font,
         };
 
@@ -149,8 +147,6 @@ enum Message {
     LaunchApp(String),
     DummyAppSelected(usize),
     DummyAppBack,
-    GithubAppSelected(usize),
-    GithubAppBack,
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
 }
@@ -164,19 +160,16 @@ impl App {
         match message {
             Message::SearchChanged(query) => {
                 self.search_query = query;
-                self.active_app = None;
                 Task::none()
             }
             Message::SectionSelected(index) => {
                 if index < self.sections.len() {
                     self.selected_section = index;
                     self.active_dummy_app = None;
-                    self.active_app = None;
                 }
                 Task::none()
             }
             Message::Rescan => {
-                self.active_app = None;
                 match scan::scan_applications() {
                     Ok(apps) => {
                         self.applications = apps;
@@ -202,7 +195,6 @@ impl App {
                         self.status_message = format!("GitHub scan error: {error}");
                     }
                 }
-                self.active_app = None;
                 Task::none()
             }
             Message::LaunchApp(exec) => {
@@ -268,16 +260,6 @@ impl App {
             }
             Message::DummyAppBack => {
                 self.active_dummy_app = None;
-                Task::none()
-            }
-            Message::GithubAppSelected(index) => {
-                if index < self.applications.len() {
-                    self.active_app = Some(index);
-                }
-                Task::none()
-            }
-            Message::GithubAppBack => {
-                self.active_app = None;
                 Task::none()
             }
             Message::ClearStatus => {
@@ -412,11 +394,6 @@ impl App {
                 return self.view_dummy_detail(app);
             }
         }
-        if let Some(index) = self.active_app {
-            if let Some(app) = self.applications.get(index) {
-                return self.view_github_detail(app);
-            }
-        }
 
         let search = text_input("Search applications...", &self.search_query)
             .on_input(Message::SearchChanged)
@@ -451,12 +428,13 @@ impl App {
     }
 
     fn view_app_grid(&self) -> Element<'_, Message> {
-        let filtered = self.filtered_applications();
+        if self.is_development_section() {
+            return self.view_dummy_grid();
+        }
+
+        let filtered: Vec<&Application> = self.filtered_applications();
 
         if filtered.is_empty() {
-            if self.is_development_section() {
-                return self.view_dummy_grid();
-            }
             return container(
                 text("No applications found")
                     .size(16)
@@ -475,7 +453,7 @@ impl App {
             let mut row_items: Vec<Element<'_, Message>> = Vec::new();
 
             for app in chunk {
-                row_items.push(self.view_app_card(app.0, app.1));
+                row_items.push(self.view_app_card(app));
             }
 
             while row_items.len() < 4 {
@@ -490,7 +468,7 @@ impl App {
         scrollable(grid).height(Fill).into()
     }
 
-    fn view_app_card<'a>(&self, index: usize, app: &'a Application) -> Element<'a, Message> {
+    fn view_app_card<'a>(&self, app: &'a Application) -> Element<'a, Message> {
         let icon_char = app
             .name
             .chars()
@@ -565,15 +543,9 @@ impl App {
             .padding(16)
             .width(Fill);
 
-        let is_github_app = app.origin == AppOrigin::External;
         let exec = app.exec.clone();
-        let message = if is_github_app {
-            Message::GithubAppSelected(index)
-        } else {
-            Message::LaunchApp(exec)
-        };
         button(card_content)
-            .on_press(message)
+            .on_press(Message::LaunchApp(exec))
             .padding(0)
             .width(Fill)
             .height(120)
@@ -737,73 +709,14 @@ impl App {
             .into()
     }
 
-    fn view_github_detail<'a>(&self, app: &'a Application) -> Element<'a, Message> {
-        let back_button = button(text("Retour").size(13).font(self.app_font()))
-            .on_press(Message::GithubAppBack)
-            .padding([8, 16]);
-
-        let title = text(&app.name)
-            .size(24)
-            .font(self.app_font_with_weight(Weight::Bold))
-            .color(color!(0xffffff));
-
-        let description_text = app
-            .description
-            .as_deref()
-            .unwrap_or("Description indisponible.");
-        let description = text(description_text)
-            .size(16)
-            .font(self.app_font())
-            .color(color!(0xcfcfe6));
-
-        let language_text = app.language.as_deref().unwrap_or("Non renseigné");
-        let language = text(format!("Langage: {}", language_text))
-            .size(12)
-            .font(self.app_font())
-            .color(color!(0x8a8aa3));
-
-        let header = row![back_button]
-            .width(Fill)
-            .align_y(iced::Alignment::Center);
-
-        let body = container(description)
-            .width(Fill)
-            .height(Fill)
-            .center_x(Fill)
-            .center_y(Fill);
-
-        let footer = row![container(text("")).width(Fill), language].align_y(iced::Alignment::End);
-
-        let detail = column![
-            header,
-            container(title).width(Fill).center_x(Fill),
-            body,
-            footer
-        ]
-        .spacing(16)
-        .padding(24)
-        .width(Fill)
-        .height(Fill);
-
-        container(detail)
-            .style(|_theme| container::Style {
-                background: Some(color!(0x0f0f1a).into()),
-                ..Default::default()
-            })
-            .width(Fill)
-            .height(Fill)
-            .into()
-    }
-
-    fn filtered_applications(&self) -> Vec<(usize, &Application)> {
+    fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
         let selected_section = self.sections.get(self.selected_section);
         self.applications
             .iter()
-            .enumerate()
             .filter(|app| {
                 if let Some(section) = selected_section {
-                    if !section.filter.matches(app.1) {
+                    if !section.filter.matches(app) {
                         return false;
                     }
                 }
@@ -811,7 +724,7 @@ impl App {
                 if query.is_empty() {
                     return true;
                 }
-                app.1.name.to_lowercase().contains(&query)
+                app.name.to_lowercase().contains(&query)
             })
             .collect()
     }
