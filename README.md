@@ -115,9 +115,10 @@ Sous Linux, Colony classe les applications selon leur dossier d'origine :
 - Toute application `.desktop` située dans un dossier listé dans `scan.colony` est marquée
   `origin = "colony"`.
 - Toute application `.desktop` détectée dans les autres dossiers de `scan.unix` est marquée
-  `origin = "external"` (applications Linux externes).
+  `origin = "external"` (affichée sous le libellé “Linux” dans l’interface).
 
-Cette règle permet de séparer clairement les applications Colony des applications Linux classiques.
+Cette règle permet de séparer clairement les applications Colony des applications Linux classiques,
+même si le libellé “Linux” est présenté côté interface.
 
 Les instructions de build/exécution seront ajoutées une fois la base Rust en place.
 
