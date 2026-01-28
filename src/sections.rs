@@ -12,12 +12,6 @@ pub struct Section {
     pub filter: SectionFilter,
 }
 
-impl Section {
-    pub fn category(&self) -> Option<&AppCategory> {
-        self.filter.category.as_ref()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SectionFilter {
     origin: OriginFilter,
