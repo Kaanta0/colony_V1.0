@@ -435,7 +435,9 @@ impl App {
             container(text("")).height(8),
             container(name)
                 .width(Fill)
-                .center_x(Fill),
+                .height(32)
+                .center_x(Fill)
+                .center_y(Fill),
         ]
         .spacing(4)
         .padding(16)
@@ -446,6 +448,7 @@ impl App {
             .on_press(Message::LaunchApp(exec))
             .padding(0)
             .width(Fill)
+            .height(120)
             .style(|_theme, status| {
                 let bg = match status {
                     button::Status::Hovered => color!(0x2a2a4e),
