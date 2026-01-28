@@ -9,6 +9,13 @@ Ce dossier centralise la documentation du projet Colony (architecture, configura
 - Décisions techniques majeures (ADR ou notes).
 - Guides d’intégration d’applications.
 
+## Priorités techniques
+
+- Se focaliser sur la **réactivité** et une faible consommation **CPU/RAM/disque**.
+- Prioriser l’**asynchrone** pour éviter de surcharger Colony.
+- Activer les modules **uniquement lors de leur utilisation**.
+- Réaliser les appels réseau **via API**.
+
 ## Décisions récentes
 
 - **UI** : Slint est adopté pour l’interface graphique.
