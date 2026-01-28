@@ -94,6 +94,8 @@ struct App {
     selected_section: usize,
     status_message: String,
     font: Font,
+    dummy_apps: Vec<DummyApp>,
+    selected_dummy: Option<String>,
 }
 
 impl App {
@@ -108,6 +110,7 @@ impl App {
         let sections = sections::load_sections();
 
         let font = font_assets.default_font();
+        let dummy_apps = development_dummy_apps();
 
         let app = Self {
             applications,
@@ -116,6 +119,8 @@ impl App {
             selected_section: 0,
             status_message,
             font,
+            dummy_apps,
+            selected_dummy: None,
         };
 
         (app, font_assets.load_task())
@@ -128,6 +133,8 @@ enum Message {
     SectionSelected(usize),
     Rescan,
     LaunchApp(String),
+    DummySelected(String),
+    DummyBack,
     ClearStatus,
     FontLoaded(Result<(), font::Error>),
 }
@@ -210,6 +217,14 @@ impl App {
                         self.status_message = message;
                     }
                 }
+                Task::none()
+            }
+            Message::DummySelected(name) => {
+                self.selected_dummy = Some(name);
+                Task::none()
+            }
+            Message::DummyBack => {
+                self.selected_dummy = None;
                 Task::none()
             }
             Message::ClearStatus => {
@@ -379,6 +394,10 @@ impl App {
     }
 
     fn view_app_grid(&self) -> Element<'_, Message> {
+        if self.is_development_section() {
+            return self.view_dummy_grid();
+        }
+
         let filtered: Vec<&Application> = self.filtered_applications();
 
         if filtered.is_empty() {
@@ -465,6 +484,161 @@ impl App {
             .into()
     }
 
+    fn view_dummy_grid(&self) -> Element<'_, Message> {
+        let filtered = self.filtered_dummy_apps();
+
+        if filtered.is_empty() {
+            return container(
+                text("No applications found")
+                    .size(16)
+                    .color(color!(0x666677)),
+            )
+            .width(Fill)
+            .height(Fill)
+            .center_x(Fill)
+            .center_y(Fill)
+            .into();
+        }
+
+        let mut rows: Vec<Element<'_, Message>> = Vec::new();
+
+        for chunk in filtered.chunks(4) {
+            let mut row_items: Vec<Element<'_, Message>> = Vec::new();
+
+            for app in chunk {
+                row_items.push(self.view_dummy_card(app));
+            }
+
+            while row_items.len() < 4 {
+                row_items.push(container(column![]).width(Fill).into());
+            }
+
+            rows.push(Row::with_children(row_items).spacing(12).into());
+        }
+
+        let grid = Column::with_children(rows).spacing(12);
+
+        scrollable(grid).height(Fill).into()
+    }
+
+    fn view_dummy_card(&self, app: &DummyApp) -> Element<'_, Message> {
+        if self.selected_dummy.as_deref() == Some(&app.name) {
+            return self.view_dummy_detail(app);
+        }
+
+        let icon_char = app
+            .name
+            .chars()
+            .next()
+            .unwrap_or('?')
+            .to_uppercase()
+            .next()
+            .unwrap_or('?');
+
+        let icon = text(icon_char.to_string())
+            .size(32)
+            .font(self.app_font_with_weight(Weight::Medium))
+            .color(color!(0x8888ff));
+
+        let name = text(app.name.clone())
+            .size(14)
+            .font(self.app_font())
+            .color(color!(0xffffff));
+
+        let card_content = column![
+            container(icon)
+                .width(Fill)
+                .center_x(Fill),
+            container(text("")).height(8),
+            container(name)
+                .width(Fill)
+                .height(32)
+                .center_x(Fill)
+                .center_y(Fill),
+        ]
+        .spacing(4)
+        .padding(16)
+        .width(Fill);
+
+        let name = app.name.clone();
+        button(card_content)
+            .on_press(Message::DummySelected(name))
+            .padding(0)
+            .width(Fill)
+            .height(160)
+            .style(|_theme, status| {
+                let bg = match status {
+                    button::Status::Hovered => color!(0x2a2a4e),
+                    button::Status::Pressed => color!(0x3a3a5e),
+                    _ => color!(0x1a1a2e),
+                };
+                button::Style {
+                    background: Some(bg.into()),
+                    text_color: color!(0xffffff),
+                    border: iced::Border::default().rounded(12),
+                    ..Default::default()
+                }
+            })
+            .into()
+    }
+
+    fn view_dummy_detail(&self, app: &DummyApp) -> Element<'_, Message> {
+        let title = text(app.name.clone())
+            .size(16)
+            .font(self.app_font_with_weight(Weight::Bold))
+            .color(color!(0xffffff));
+
+        let back_button = button(text("Retour").size(12).font(self.app_font()))
+            .on_press(Message::DummyBack)
+            .padding([4, 10])
+            .style(|theme, status| {
+                let base = button::secondary(theme, status);
+                button::Style {
+                    background: Some(color!(0x2a2a4e).into()),
+                    text_color: color!(0xffffff),
+                    border: iced::Border::default().rounded(6),
+                    ..base
+                }
+            });
+
+        let header = row![title, container(text("")).width(Fill), back_button]
+            .align_y(iced::Alignment::Center);
+
+        let description = container(
+            text(app.description.clone())
+                .size(13)
+                .font(self.app_font())
+                .color(color!(0xddddff)),
+        )
+        .width(Fill)
+        .height(Fill)
+        .center_x(Fill)
+        .center_y(Fill);
+
+        let language = text(app.language.clone())
+            .size(12)
+            .font(self.app_font_with_weight(Weight::Medium))
+            .color(color!(0x8a8aa3));
+
+        let footer = row![container(text("")).width(Fill), language];
+
+        let detail = column![header, description, footer]
+            .spacing(8)
+            .padding(16)
+            .width(Fill)
+            .height(Fill);
+
+        container(detail)
+            .width(Fill)
+            .height(160)
+            .style(|_theme| container::Style {
+                background: Some(color!(0x1a1a2e).into()),
+                border: iced::Border::default().rounded(12),
+                ..Default::default()
+            })
+            .into()
+    }
+
     fn filtered_applications(&self) -> Vec<&Application> {
         let query = self.search_query.to_lowercase();
         let selected_section = self.sections.get(self.selected_section);
@@ -485,6 +659,26 @@ impl App {
             .collect()
     }
 
+    fn filtered_dummy_apps(&self) -> Vec<&DummyApp> {
+        let query = self.search_query.to_lowercase();
+        self.dummy_apps
+            .iter()
+            .filter(|app| {
+                if query.is_empty() {
+                    return true;
+                }
+                app.name.to_lowercase().contains(&query)
+            })
+            .collect()
+    }
+
+    fn is_development_section(&self) -> bool {
+        self.sections
+            .get(self.selected_section)
+            .map(Section::is_development)
+            .unwrap_or(false)
+    }
+
     fn app_font(&self) -> Font {
         self.font
     }
@@ -496,4 +690,46 @@ impl App {
     fn theme(&self) -> Theme {
         Theme::Dark
     }
+}
+
+#[derive(Debug, Clone)]
+struct DummyApp {
+    name: String,
+    description: String,
+    language: String,
+}
+
+fn development_dummy_apps() -> Vec<DummyApp> {
+    vec![
+        DummyApp {
+            name: "Swift Toolkit".to_string(),
+            description: "Suite d'outils pour prototyper des apps Swift avec des modules rapides."
+                .to_string(),
+            language: "Langage: Swift".to_string(),
+        },
+        DummyApp {
+            name: "Kotlin Studio".to_string(),
+            description: "Environnement léger pour concevoir des projets Kotlin multiplateforme."
+                .to_string(),
+            language: "Langage: Kotlin".to_string(),
+        },
+        DummyApp {
+            name: "Dart Lab".to_string(),
+            description: "Laboratoire interactif pour tester des snippets Dart en temps réel."
+                .to_string(),
+            language: "Langage: Dart".to_string(),
+        },
+        DummyApp {
+            name: "TypeScript Playground".to_string(),
+            description: "Bac à sable pour explorer le typage TypeScript et ses utilitaires."
+                .to_string(),
+            language: "Langage: TypeScript".to_string(),
+        },
+        DummyApp {
+            name: "Flutter Dev Tools".to_string(),
+            description: "Console de diagnostic pour inspecter les widgets Flutter et la perf."
+                .to_string(),
+            language: "Langage: Dart".to_string(),
+        },
+    ]
 }
