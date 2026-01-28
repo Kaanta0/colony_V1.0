@@ -1,6 +1,7 @@
 [
   { "name": "All", "icon": "\uf00a", "origin": "non_windows", "category": "all" },
   { "name": "Windows", "icon": "\uf17a", "origin": "windows", "category": "all" },
+  { "name": "Linux", "icon": "\uf17c", "origin": "linux", "category": "all" },
   { "name": "Development", "icon": "\uf121", "origin": "non_windows", "category": "development" },
   { "name": "Graphics", "icon": "\uf1fc", "origin": "non_windows", "category": "graphics" },
   { "name": "Network", "icon": "\uf0ac", "origin": "non_windows", "category": "network" },
