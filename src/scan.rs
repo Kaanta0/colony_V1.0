@@ -312,18 +312,9 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
     let name = path.file_stem()?.to_str()?.to_string();
 
     // Skip certain system entries
-    if contains_filtered_keyword(&name) {
-        return None;
-    }
-
-    if let Some(target) = read_lnk_target(path) {
-        if contains_filtered_keyword(&target) {
-            return None;
-        }
-    }
-
     let lower = name.to_lowercase();
-    if lower.contains("readme")
+    if lower.contains("uninstall")
+        || lower.contains("readme")
         || lower.contains("help")
         || lower.contains("website")
         || lower.contains("manual")
@@ -344,59 +335,6 @@ fn parse_lnk_file(path: &Path) -> Option<Application> {
         category,
         origin: AppOrigin::Windows,
     })
-}
-
-#[cfg(windows)]
-fn contains_filtered_keyword(value: &str) -> bool {
-    let lower = value.to_lowercase();
-    let keywords = [
-        "désinstaller",
-        "desinstaller",
-        "désinstallation",
-        "desinstallation",
-        "uninstall",
-        "uninstaller",
-        "unins",
-        "remove",
-        "installer",
-        "installation",
-        "setup",
-    ];
-
-    keywords.iter().any(|keyword| lower.contains(keyword))
-}
-
-#[cfg(windows)]
-fn read_lnk_target(path: &Path) -> Option<String> {
-    let path_str = path.to_str()?;
-    let escaped = path_str.replace('\'', "''");
-    let script = format!(
-        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{}'); \
-         if ($s.TargetPath) {{ $s.TargetPath }}; \
-         if ($s.Arguments) {{ $s.Arguments }}",
-        escaped
-    );
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let combined = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    if combined.is_empty() {
-        None
-    } else {
-        Some(combined)
-    }
 }
 
 #[cfg(windows)]
