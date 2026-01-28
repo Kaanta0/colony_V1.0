@@ -231,6 +231,7 @@ impl App {
             .collect();
 
         let category_list = Column::with_children(category_buttons).spacing(4);
+        let category_scroll = scrollable(category_list).height(Length::Fill);
 
         let rescan_btn = button(text("Rescan").size(13).font(app_font()))
             .on_press(Message::Rescan)
@@ -241,7 +242,7 @@ impl App {
             title,
             container(text("")).height(24),
             category_header,
-            category_list,
+            category_scroll,
             container(text("")).height(Length::Fill),
             rescan_btn,
         ]
