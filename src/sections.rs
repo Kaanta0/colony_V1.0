@@ -95,10 +95,7 @@ pub fn load_sections() -> Vec<Section> {
     match fs::read_to_string(path) {
         Ok(contents) => match serde_json::from_str::<Vec<SectionConfig>>(&contents) {
             Ok(configs) => {
-                let sections: Vec<Section> = configs
-                    .into_iter()
-                    .map(SectionConfig::into_section)
-                    .collect();
+                let sections: Vec<Section> = configs.into_iter().map(SectionConfig::into_section).collect();
                 if sections.is_empty() {
                     eprintln!("[sections] Config loaded but no sections found, using defaults.");
                     default_sections()
@@ -121,7 +118,9 @@ pub fn load_sections() -> Vec<Section> {
 fn parse_origin(origin: Option<&str>) -> OriginFilter {
     match origin.map(|value| value.trim().to_lowercase()) {
         Some(value) if value == "windows" || value == "windows_only" => OriginFilter::WindowsOnly,
-        Some(value) if value == "non_windows" || value == "nonwindows" => OriginFilter::NonWindows,
+        Some(value) if value == "non_windows" || value == "nonwindows" => {
+            OriginFilter::NonWindows
+        }
         Some(value) if value == "linux" || value == "linux_only" => OriginFilter::ExternalOnly,
         Some(value) if value == "colony" => OriginFilter::ColonyOnly,
         Some(value) if value == "external" => OriginFilter::ExternalOnly,
