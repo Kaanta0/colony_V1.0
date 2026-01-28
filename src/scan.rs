@@ -368,5 +368,19 @@ fn clean_exec(exec: &str) -> String {
         }
     }
 
-    result.trim().to_string()
+    let trimmed = result.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    match shell_words::split(trimmed) {
+        Ok(parts) => {
+            let filtered: Vec<String> = parts.into_iter().filter(|part| !part.is_empty()).collect();
+            if filtered.is_empty() {
+                return String::new();
+            }
+            shell_words::join(&filtered)
+        }
+        Err(_) => trimmed.to_string(),
+    }
 }
